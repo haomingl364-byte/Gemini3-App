@@ -26,6 +26,14 @@ export const BRANCH_ELEMENTS: {[key: string]: string} = {
   '亥': 'water', '子': 'water'
 };
 
+export const ELEMENT_CN: {[key: string]: string} = {
+  'wood': '木',
+  'fire': '火',
+  'earth': '土',
+  'metal': '金',
+  'water': '水'
+};
+
 // Simplified list of major cities and their longitude for True Solar Time
 export const CITIES: {[key: string]: number} = {
   '不参考出生地 (北京时间)': 120.0,
@@ -77,4 +85,20 @@ export const LUNAR_DAYS = [
   '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
   '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
   '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
+];
+
+export const LUNAR_TIMES = [
+    { name: '早子时 (00:00-01:00)', value: 0 },
+    { name: '丑时 (01:00-03:00)', value: 1 },
+    { name: '寅时 (03:00-05:00)', value: 3 },
+    { name: '卯时 (05:00-07:00)', value: 5 },
+    { name: '辰时 (07:00-09:00)', value: 7 },
+    { name: '巳时 (09:00-11:00)', value: 9 },
+    { name: '午时 (11:00-13:00)', value: 11 },
+    { name: '未时 (13:00-15:00)', value: 13 },
+    { name: '申时 (15:00-17:00)', value: 15 },
+    { name: '酉时 (17:00-19:00)', value: 17 },
+    { name: '戌时 (19:00-21:00)', value: 19 },
+    { name: '亥时 (21:00-23:00)', value: 21 },
+    { name: '晚子时 (23:00-00:00)', value: 23 },
 ];

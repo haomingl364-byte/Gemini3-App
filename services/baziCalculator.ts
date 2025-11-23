@@ -1,7 +1,7 @@
 
 import { Solar, Lunar, EightChar, LunarUtil, SolarUtil, DaYun as LunarDaYun } from 'lunar-javascript';
 import { BaZiChart, Pillar, Gender, ElementType, DaYun, HiddenStem, LiuNian, CalendarType, UserInput } from '../types';
-import { STEM_ELEMENTS, BRANCH_ELEMENTS, CITIES, GAN, ZHI } from '../constants';
+import { STEM_ELEMENTS, BRANCH_ELEMENTS, ELEMENT_CN, CITIES, GAN, ZHI } from '../constants';
 
 const getElement = (char: string): ElementType => {
   const type = STEM_ELEMENTS[char] || BRANCH_ELEMENTS[char] || 'earth';
@@ -155,7 +155,8 @@ const createPillar = (
     shenSha = getShenSha(branch, yearBranch, dayBranch, dayMaster);
     const kongWangList = eightChar.getDayXunKong();
     isKongWang = kongWangList.includes(branch);
-    if (isKongWang) shenSha.push('空亡');
+    // We do not add '空亡' to shenSha list here to avoid clutter, handled by UI externally if needed, 
+    // but PillarDisplay uses the isKongWang boolean.
   }
 
   return {
@@ -172,6 +173,53 @@ const createPillar = (
   };
 };
 
+// --- Ren Yuan Si Ling Logic ---
+
+interface CommanderRule {
+  gan: string;
+  days: number;
+}
+
+const COMMANDER_TABLE: {[key: string]: CommanderRule[]} = {
+  '寅': [{gan: '己', days: 7}, {gan: '丙', days: 5}, {gan: '甲', days: 18}],
+  '卯': [{gan: '甲', days: 9}, {gan: '癸', days: 3}, {gan: '乙', days: 18}],
+  '辰': [{gan: '乙', days: 7}, {gan: '癸', days: 5}, {gan: '戊', days: 18}],
+  '巳': [{gan: '戊', days: 7}, {gan: '庚', days: 5}, {gan: '丙', days: 18}],
+  '午': [{gan: '丙', days: 9}, {gan: '己', days: 3}, {gan: '丁', days: 18}],
+  '未': [{gan: '丁', days: 7}, {gan: '乙', days: 5}, {gan: '己', days: 18}],
+  '申': [{gan: '己', days: 7}, {gan: '壬', days: 5}, {gan: '庚', days: 18}], 
+  '酉': [{gan: '庚', days: 2}, {gan: '己', days: 1}, {gan: '辛', days: 27}],
+  '戌': [{gan: '辛', days: 7}, {gan: '丁', days: 5}, {gan: '戊', days: 18}],
+  '亥': [{gan: '戊', days: 7}, {gan: '甲', days: 5}, {gan: '壬', days: 18}],
+  '子': [{gan: '壬', days: 9}, {gan: '辛', days: 3}, {gan: '癸', days: 18}],
+  '丑': [{gan: '癸', days: 7}, {gan: '辛', days: 5}, {gan: '己', days: 18}],
+};
+
+const getRenYuanCommander = (monthBranch: string, daysSinceJie: number): string => {
+  const rules = COMMANDER_TABLE[monthBranch];
+  if (!rules) return '未知';
+
+  const currentDay = daysSinceJie + 1;
+  
+  let accumulatedDays = 0;
+  let matchedGan = '';
+  
+  for (const rule of rules) {
+    accumulatedDays += rule.days;
+    if (currentDay <= accumulatedDays) {
+      matchedGan = rule.gan;
+      break;
+    }
+  }
+  if (!matchedGan) matchedGan = rules[rules.length - 1].gan;
+
+  const elementKey = STEM_ELEMENTS[matchedGan];
+  const elementCn = ELEMENT_CN[elementKey] || '';
+
+  return `${matchedGan}${elementCn}司令`;
+};
+
+
 // --- Reverse Search Function ---
 
 export interface MatchingDate {
@@ -179,7 +227,7 @@ export interface MatchingDate {
   month: number;
   day: number;
   hour: number;
-  ganZhi: string; // Full 8 char string for display
+  ganZhi: string; 
 }
 
 export const findDatesFromPillars = (
@@ -193,38 +241,10 @@ export const findDatesFromPillars = (
   const endYear = 2050;
   
   const targetYearGZ = yGan + yZhi;
-  const targetMonthGZ = mGan + mZhi;
-  const targetDayGZ = dGan + dZhi;
-  const targetHourGZ = hGan + hZhi;
-
-  // Optimization: Check every year. 
-  // The Year GanZhi repeats every 60 years.
-  // But since solar/lunar year boundaries (Li Chun) shift, we iterate all years
-  // and check the dominant GanZhi.
   
   for (let y = startYear; y <= endYear; y++) {
-     // Check mid-year to get the main GanZhi of the year
-     // A solar year might cover two GanZhi years at the start, but usually we are looking for the main one.
      const checkDate = Solar.fromYmd(y, 6, 1); 
      const lunarCheck = checkDate.getLunar();
-     
-     // If this year doesn't match the target Year GanZhi, skip (mostly)
-     // However, Li Chun is around Feb 4. 
-     // If the user wants a date in Jan 1984, it might be Gui Hai (1983's year pillar).
-     // So we need to be careful. 
-     // Brute force optimization:
-     // Check if 'y' or 'y-1' could match.
-     
-     // To be absolutely safe and reasonably fast:
-     // Iterate 12 months of every year. 
-     // If Month GanZhi matches, then iterate days.
-     
-     // Further optimization:
-     // Year GanZhi matches:
-     // y = 1984 (Jia Zi). 
-     // If target is Jia Zi, we look at 1984 (mostly) and Jan 1985 (tail) or Jan 1984 (head of prev).
-     
-     // Let's filter by Year GanZhi first to reduce search space by 60x.
      const yearPillarOfJun1 = lunarCheck.getYearInGanZhi();
      const prevYearPillar = Solar.fromYmd(y, 1, 15).getLunar().getYearInGanZhi();
      
@@ -234,24 +254,17 @@ export const findDatesFromPillars = (
      
      if (!candidateYear) continue;
 
-     // Iterate through months (approx 12 checks)
      for (let m = 1; m <= 12; m++) {
-        // Check a day in the middle of the month to see Month GanZhi?
-        // Month GanZhi changes at JieQi. 
-        // It's safer to check two points in a month: 5th (often after Li Chun/Jing Zhe) and 25th.
         const daysToCheck = [5, 20];
-        
         for (let dTry of daysToCheck) {
            const s = Solar.fromYmd(y, m, dTry);
            const l = s.getLunar();
            const e = l.getEightChar();
-           e.setSect(2); // Standardize
+           e.setSect(2); 
 
            if (e.getYearGan() === yGan && e.getYearZhi() === yZhi &&
                e.getMonthGan() === mGan && e.getMonthZhi() === mZhi) {
                
-               // Found matching Year & Month Pillar in this month.
-               // Now iterate ALL days in this month to find the Day Pillar.
                const daysInMonth = SolarUtil.getDaysOfMonth(y, m);
                for (let d = 1; d <= daysInMonth; d++) {
                   const sDay = Solar.fromYmd(y, m, d);
@@ -263,10 +276,6 @@ export const findDatesFromPillars = (
                       eDay.getMonthGan() === mGan && eDay.getMonthZhi() === mZhi &&
                       eDay.getYearGan() === yGan && eDay.getYearZhi() === yZhi) {
                       
-                      // Found matching Year, Month, Day.
-                      // Now check Hour.
-                      // Check standard hours: 0 (Zi), 1 (Zi), 3 (Chou), 5 (Yin)...
-                      // Valid hours: 0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23
                       const hoursToCheck = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
                       for (let h of hoursToCheck) {
                           const sHour = Solar.fromYmdHms(y, m, d, h, 0, 0);
@@ -275,7 +284,6 @@ export const findDatesFromPillars = (
                           eHour.setSect(2);
 
                           if (eHour.getTimeGan() === hGan && eHour.getTimeZhi() === hZhi) {
-                              // FOUND IT!
                               matches.push({
                                   year: y,
                                   month: m,
@@ -283,15 +291,11 @@ export const findDatesFromPillars = (
                                   hour: h,
                                   ganZhi: `${yGan}${yZhi} ${mGan}${mZhi} ${dGan}${dZhi} ${hGan}${hZhi}`
                               });
-                              
-                              // Optimization: Once found for a day, usually only one hour matches unless it's Zi hour boundary.
-                              // But we continue just in case.
                           }
                       }
-                      // Break after finding the day? No, continue.
                   }
                }
-               break; // Optimization: We checked this month fully once we found it contained the Month Pillar.
+               break; 
            }
         }
      }
@@ -303,23 +307,14 @@ export const findDatesFromPillars = (
 
 export const calculateBaZi = (input: UserInput): BaZiChart => {
   
-  // 1. Calculate Date Object
   let solar: Solar;
 
   if (input.calendarType === CalendarType.LUNAR) {
-    // Convert Lunar to Solar first
-    // Lunar.fromYmdHms(year, month, day, hour, minute, second)
-    // Note: 'month' input in lunar-javascript:
-    // Positive for normal, negative for leap. 
-    // e.g. If user selects Leap 4th Month, input should be -4.
-    // We assume standard month for now unless input.isLeapMonth is added to UI.
-    // For simplicity, we map UI month directly. 
     solar = Lunar.fromYmdHms(input.year, input.month, input.day, input.hour, input.minute, 0).getSolar();
   } else {
     solar = Solar.fromYmdHms(input.year, input.month, input.day, input.hour, input.minute, 0);
   }
 
-  // 2. TRUE SOLAR TIME CORRECTION
   const longitude = CITIES[input.selectedCityKey] || 120.0;
   if (longitude !== 120.0) {
       const offsetMinutes = (longitude - 120.0) * 4;
@@ -330,24 +325,29 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
 
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
-  eightChar.setSect(2); // 2 = 晚子时归翌日
+  
+  // Set Sect based on Early/Late Rat preference
+  // Sect 2: 23:00 is late rat of current day, 00:00 is early rat of next day (Distinguish enabled)
+  // Sect 1: 23:00 is Zi hour of next day (Distinguish disabled / Standard)
+  eightChar.setSect(input.processEarlyLateRat ? 2 : 1); 
 
   const dayMaster = eightChar.getDayGan();
   const dayBranch = eightChar.getDayZhi();
   const yearBranch = eightChar.getYearZhi();
 
-  // Pillars
   const yearPillar = createPillar(eightChar.getYearGan(), eightChar.getYearZhi(), eightChar, 'year', dayMaster, yearBranch, dayBranch);
   const monthPillar = createPillar(eightChar.getMonthGan(), eightChar.getMonthZhi(), eightChar, 'month', dayMaster, yearBranch, dayBranch);
   const dayPillar = createPillar(eightChar.getDayGan(), eightChar.getDayZhi(), eightChar, 'day', dayMaster, yearBranch, dayBranch);
   const hourPillar = createPillar(eightChar.getTimeGan(), eightChar.getTimeZhi(), eightChar, 'time', dayMaster, yearBranch, dayBranch);
+  
+  const dayKongWang = eightChar.getDayXunKong(); // returns string e.g. "戌亥"
 
-  // Solar Term Logic
   const prevJie = lunar.getPrevJie();
   const daysAfterJie = Math.floor(Math.abs(solar.subtract(prevJie.getSolar())));
   const solarTermStr = `出生于${prevJie.getName()}后第${daysAfterJie}日`;
+  
+  const renYuanSiLing = getRenYuanCommander(eightChar.getMonthZhi(), daysAfterJie);
 
-  // Da Yun
   const genderNum = input.gender === Gender.MALE ? 1 : 0;
   const yun = eightChar.getYun(genderNum);
   
@@ -356,7 +356,6 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
   
   const startLuckText = `约${yun.getStartYear()}年${yun.getStartMonth()}个月${yun.getStartDay()}日后上运`;
 
-  // Years before Da Yun (Yun Qian)
   const yunQian: LiuNian[] = [];
   const birthYear = solar.getYear();
   
@@ -368,6 +367,14 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
     const stem = ganZhi.substring(0, 1);
     const branch = ganZhi.substring(1, 2);
     
+    // Calculate Ten God of Da Yun Stem relative to Day Master
+    let stemTenGod = '';
+    try {
+        stemTenGod = LunarUtil.getShiShen(dayMaster, stem);
+    } catch (e) {
+        stemTenGod = '';
+    }
+
     const liuNianList: LiuNian[] = [];
     const liuNianArr = dy.getLiuNian(); 
     
@@ -389,6 +396,7 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
       startAge: dy.getStartAge(),
       startYear: dy.getStartYear(),
       stem,
+      stemTenGod,
       stemElement: getElement(stem),
       branch,
       branchElement: getElement(branch),
@@ -420,9 +428,8 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
     day: dayPillar,
     hour: hourPillar,
     
-    taiYuan: eightChar.getTaiYuan(),
-    mingGong: eightChar.getMingGong(),
-    shenGong: eightChar.getShenGong(),
+    dayKongWang, // Pass to chart
+    renYuanSiLing, 
     
     daYun: daYunList,
     yunQian: yunQian

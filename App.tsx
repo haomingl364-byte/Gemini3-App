@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X } from 'lucide-react';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
-import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_DAYS } from './constants';
+import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_DAYS, LUNAR_TIMES } from './constants';
 import { Button } from './components/Button';
 import { PillarDisplay } from './components/PillarDisplay';
 import { HistoryDrawer } from './components/HistoryDrawer';
@@ -20,6 +21,8 @@ const initialInput: UserInput = {
   isLeapMonth: false,
   selectedCityKey: '不参考出生地 (北京时间)',
   autoSave: true,
+  group: '',
+  processEarlyLateRat: true, // Default to true (Distinguish Early/Late Rat)
   manualYear: '甲子',
   manualMonth: '丙寅',
   manualDay: '戊辰',
@@ -55,7 +58,8 @@ function App() {
   const [records, setRecords] = useState<Record[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  const [showNotesModal, setShowNotesModal] = useState(false); // Moved notes to modal for space
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
 
   const years = Array.from({length: 150}, (_, i) => 1900 + i);
   const hours = Array.from({length: 24}, (_, i) => i);
@@ -88,6 +92,7 @@ function App() {
       createdAt: Date.now(),
       chart: chart,
       notes: '',
+      group: input.group || '默认分组'
     };
     setCurrentRecord(newRecord);
     setNoteDraft('');
@@ -134,8 +139,10 @@ function App() {
       gender: rec.gender,
       year: y, month: m, day: d, hour: h, minute: min,
       calendarType: rec.calendarType || CalendarType.SOLAR,
-      selectedCityKey: rec.city || '不参考出生地 (北京时间)'
+      selectedCityKey: rec.city || '不参考出生地 (北京时间)',
+      group: rec.group === '默认分组' ? '' : (rec.group || '')
     });
+    setHistoryOpen(false); // Close drawer on selection
     setView('chart');
   };
 
@@ -174,15 +181,50 @@ function App() {
       setShowDateResults(false);
   };
 
+  const handleModeSwitch = (mode: 'SOLAR' | 'LUNAR' | 'MANUAL') => {
+      if (mode === 'MANUAL') {
+          setInputMode('manual');
+      } else {
+          setInputMode('date');
+          setInput({ 
+              ...input, 
+              calendarType: mode === 'SOLAR' ? CalendarType.SOLAR : CalendarType.LUNAR,
+              // Reset minute to 0 if switching to Lunar to keep it clean
+              minute: mode === 'SOLAR' ? input.minute : 0 
+          });
+      }
+  };
+
+  const getCurrentModeKey = () => {
+      if (inputMode === 'manual') return 'MANUAL';
+      return input.calendarType === CalendarType.SOLAR ? 'SOLAR' : 'LUNAR';
+  };
+
+  // --- Computed Options ---
+  const lunarTimeOptions = useMemo(() => {
+    if (input.processEarlyLateRat) {
+        return LUNAR_TIMES;
+    }
+    // If not processing early/late rat, consolidate 0 (Early Rat) and 23 (Late Rat) into generic Zi.
+    // Usually mapping 0 to standard Zi is safest for "Day N Zi Hour" -> Day N+1 calculation in many systems
+    // But here we just filter the list for UI.
+    return LUNAR_TIMES.filter(t => t.value !== 23).map(t => 
+        t.value === 0 ? { ...t, name: '子时 (23:00-01:00)' } : t
+    );
+  }, [input.processEarlyLateRat]);
+
+
   // --- UI Renders ---
 
-  const renderInputGroup = (label: string, content: React.ReactNode) => (
-    <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden mb-4 shadow-sm">
-       <div className="bg-[#fffcf5] px-4 py-1.5 border-b border-[#ebe5ce] flex items-center gap-2">
-          <span className="w-1 h-3 bg-[#8B0000] rounded-full"></span>
-          <span className="text-xs text-[#5c4033] font-bold tracking-wider">{label}</span>
-       </div>
-       <div className="p-4">
+  const renderInputGroup = (label: string | null, content: React.ReactNode) => (
+    <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden mb-2 shadow-sm">
+       {label && (
+           <div className="bg-[#fffcf5] px-3 py-1.5 border-b border-[#ebe5ce] flex items-center gap-2">
+              <span className="w-1 h-3 bg-[#8B0000] rounded-full"></span>
+              <span className="text-xs text-[#5c4033] font-bold tracking-wider">{label}</span>
+           </div>
+       )}
+       <div className="p-2">
           {content}
        </div>
     </div>
@@ -201,101 +243,147 @@ function App() {
       return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}日</option>);
   };
 
-  const renderForm = () => (
-    <div className="flex flex-col h-full max-w-md mx-auto px-5 pt-8 pb-6">
-      <div className="text-center mb-6">
-        <h1 className="text-4xl font-calligraphy text-[#8B0000] mb-1 drop-shadow-sm">八字排盘宝</h1>
-        <p className="text-[#5c4033] text-[10px] uppercase tracking-[0.4em] opacity-70">Professional BaZi</p>
+  const renderForm = () => {
+    const uniqueGroups = Array.from(new Set(records.map(r => r.group || '默认分组')))
+        .filter(g => g !== '默认分组')
+        .sort();
+    
+    return (
+    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-2 pb-6 font-sans">
+      <div className="text-center mb-1">
+        <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
+        <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
       </div>
 
-      <div className="flex p-1 bg-[#eaddcf] rounded-lg mb-5 border border-[#d6cda4] shadow-inner">
-        <button onClick={() => setInputMode('date')}
-          className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${inputMode === 'date' ? 'bg-[#8B0000] text-[#fff8ea] shadow' : 'text-[#5c4033] hover:bg-white/30'}`}>
-           <Calendar size={14} className="inline mr-1 mb-0.5" /> 日期排盘
-        </button>
-        <button onClick={() => setInputMode('manual')}
-          className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${inputMode === 'manual' ? 'bg-[#8B0000] text-[#fff8ea] shadow' : 'text-[#5c4033] hover:bg-white/30'}`}>
-           <RotateCcw size={14} className="inline mr-1 mb-0.5" /> 八字反推
-        </button>
-      </div>
-
-      <form onSubmit={handleArrange} className="flex-1 relative">
-        {renderInputGroup("基础信息 Basic Info", (
-            <div className="space-y-4">
-                <div className="flex gap-3">
-                    <input type="text" placeholder="请输入姓名" value={input.name}
-                        onChange={e => setInput({ ...input, name: e.target.value })}
-                        className="flex-1 bg-transparent border-b border-[#d6cda4] p-2 text-[#450a0a] focus:border-[#8B0000] outline-none text-lg placeholder-[#a89f91]"
-                    />
-                    <div className="flex bg-[#eaddcf] rounded-lg p-1 gap-1">
-                        {[Gender.MALE, Gender.FEMALE].map((g) => (
-                        <button key={g} type="button" onClick={() => setInput({ ...input, gender: g })}
-                            className={`px-3 py-1 rounded text-sm font-bold transition-all ${input.gender === g ? 'bg-[#8B0000] text-[#fff8ea]' : 'text-[#5c4033]'}`}>
-                            {g}
-                        </button>
-                        ))}
-                    </div>
+      <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
+        {renderInputGroup(null, (
+            <div className="flex gap-3 items-center">
+                <input type="text" placeholder="请输入姓名" value={input.name}
+                    onChange={e => setInput({ ...input, name: e.target.value })}
+                    className="flex-1 bg-transparent border-b border-[#d6cda4] py-1 px-2 text-[#450a0a] focus:border-[#8B0000] outline-none text-base placeholder-[#a89f91]"
+                />
+                <div className="flex bg-[#eaddcf] rounded-lg p-0.5 gap-0.5 shrink-0">
+                    {[Gender.MALE, Gender.FEMALE].map((g) => (
+                    <button key={g} type="button" onClick={() => setInput({ ...input, gender: g })}
+                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${input.gender === g ? 'bg-[#8B0000] text-[#fff8ea]' : 'text-[#5c4033]'}`}>
+                        {g}
+                    </button>
+                    ))}
                 </div>
             </div>
         ))}
 
-        {inputMode === 'date' ? (
-            <>
-                {renderInputGroup("出生时间 Birth Time", (
-                    <div className="space-y-4">
-                         <div className="flex justify-center mb-2">
-                            <div className="bg-[#eaddcf] rounded-full p-0.5 flex gap-1 border border-[#d6cda4]">
-                                {[CalendarType.SOLAR, CalendarType.LUNAR].map(t => (
-                                    <button key={t} type="button" onClick={() => setInput({...input, calendarType: t})}
-                                        className={`px-4 py-0.5 rounded-full text-xs font-bold transition-all ${input.calendarType === t ? 'bg-white text-[#8B0000] shadow-sm' : 'text-[#5c4033]'}`}>
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
-                         </div>
-                         <div className="grid grid-cols-5 gap-1 text-center">
-                             {[
-                               {l:'年', v:input.year, fn:(v:string)=>setInput({...input, year:Number(v)}), opt:years},
-                               {l:'月', v:input.month, fn:(v:string)=>setInput({...input, month:Number(v)}), optC:getMonthOptions()},
-                               {l:'日', v:input.day, fn:(v:string)=>setInput({...input, day:Number(v)}), optC:getDayOptions()},
-                               {l:'时', v:input.hour, fn:(v:string)=>setInput({...input, hour:Number(v)}), opt:hours},
-                               {l:'分', v:input.minute, fn:(v:string)=>setInput({...input, minute:Number(v)}), opt:minutes},
-                             ].map((field: any, i) => (
-                                 <div key={i} className="flex flex-col gap-1">
-                                    <label className="text-[10px] text-[#8c7b75]">{field.l}</label>
-                                    <select value={field.v} onChange={(e) => field.fn(e.target.value)}
-                                        className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none">
-                                        {field.opt ? field.opt.map((o:any)=><option key={o} value={o}>{o}</option>) : field.optC}
-                                    </select>
-                                 </div>
-                             ))}
-                         </div>
-                    </div>
+        <div className="flex justify-center mb-2">
+            <div className="bg-[#eaddcf] rounded-full p-0.5 flex gap-1 border border-[#d6cda4] shadow-sm">
+                {[
+                    { key: 'SOLAR', label: '公历' },
+                    { key: 'LUNAR', label: '农历' },
+                    { key: 'MANUAL', label: '八字反推' }
+                ].map((mode) => (
+                    <button 
+                        key={mode.key} 
+                        type="button" 
+                        onClick={() => handleModeSwitch(mode.key as any)}
+                        className={`px-4 py-1 rounded-full text-xs font-bold transition-all ${getCurrentModeKey() === mode.key ? 'bg-white text-[#8B0000] shadow-sm' : 'text-[#5c4033] hover:text-[#8B0000]/70'}`}
+                    >
+                        {mode.label}
+                    </button>
                 ))}
-                {renderInputGroup("真太阳时 True Solar Time", (
-                    <div className="flex items-center gap-2">
-                        <MapPin className="text-[#8B0000]" size={16} />
+            </div>
+        </div>
+
+        <div className="bg-white/80 border border-[#d6cda4] rounded-lg p-3 shadow-sm mb-2">
+            {inputMode === 'date' ? (
+                <div className="space-y-3">
+                     <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-1 text-center`}>
+                         {/* Year */}
+                         <div className="flex flex-col gap-1">
+                             <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
+                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
+                             </select>
+                             <label className="text-[9px] text-[#8c7b75]">年</label>
+                         </div>
+                         
+                         {/* Month */}
+                         <div className="flex flex-col gap-1">
+                             <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
+                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 {getMonthOptions()}
+                             </select>
+                             <label className="text-[9px] text-[#8c7b75]">月</label>
+                         </div>
+
+                         {/* Day */}
+                         <div className="flex flex-col gap-1">
+                             <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
+                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 {getDayOptions()}
+                             </select>
+                             <label className="text-[9px] text-[#8c7b75]">日</label>
+                         </div>
+
+                         {/* Hour Selection - Conditional Logic */}
+                         {input.calendarType === CalendarType.LUNAR ? (
+                            <div className="flex flex-col gap-1 col-span-1">
+                                <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
+                                    className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                    {lunarTimeOptions.map((t) => (
+                                        <option key={t.value} value={t.value}>{t.name}</option>
+                                    ))}
+                                </select>
+                                <label className="text-[9px] text-[#8c7b75]">时辰</label>
+                            </div>
+                         ) : (
+                            <>
+                                <div className="flex flex-col gap-1">
+                                     <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
+                                         className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                         {hours.map(h => <option key={h} value={h}>{h}点</option>)}
+                                     </select>
+                                     <label className="text-[9px] text-[#8c7b75]">时</label>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                     <select value={input.minute} onChange={(e) => setInput({...input, minute:Number(e.target.value)})}
+                                         className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                         {minutes.map(m => <option key={m} value={m}>{m}分</option>)}
+                                     </select>
+                                     <label className="text-[9px] text-[#8c7b75]">分</label>
+                                </div>
+                            </>
+                         )}
+                     </div>
+                     
+                     {/* Options for Lunar */}
+                     {input.calendarType === CalendarType.LUNAR && (
+                        <div className="flex justify-end border-t border-[#f0ebda] pt-2">
+                             <label className="flex items-center gap-2 cursor-pointer group">
+                                <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                    {input.processEarlyLateRat && <Check size={10} className="text-white" />}
+                                </div>
+                                <input type="checkbox" className="hidden" 
+                                    checked={input.processEarlyLateRat} 
+                                    onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
+                                />
+                                <span className="text-[10px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">区分早晚子时</span>
+                             </label>
+                        </div>
+                     )}
+
+                     {/* Merged True Solar Time Selection */}
+                     <div className="flex items-center gap-2 pt-2 border-t border-[#f0ebda]">
+                        <MapPin className="text-[#8B0000]" size={14} />
                         <select value={input.selectedCityKey} onChange={(e) => setInput({...input, selectedCityKey: e.target.value})}
-                            className="flex-1 bg-transparent text-[#450a0a] text-sm outline-none border-b border-dashed border-[#d6cda4] py-1">
+                            className="flex-1 bg-transparent text-[#450a0a] text-xs outline-none py-1">
                             {Object.keys(CITIES).map(city => <option key={city} value={city}>{city}</option>)}
                         </select>
-                    </div>
-                ))}
-                <div className="flex items-center justify-end px-2 mb-4">
-                    <label className="flex items-center gap-2 text-xs text-[#5c4033] cursor-pointer">
-                        <input type="checkbox" checked={input.autoSave} onChange={(e) => setInput({...input, autoSave: e.target.checked})}
-                            className="rounded text-[#8B0000] focus:ring-[#8B0000] bg-transparent border-[#8B0000]" />
-                        自动存档
-                    </label>
+                     </div>
                 </div>
-                <Button type="submit">立刻排盘 Generate</Button>
-            </>
-        ) : (
-            <>
-                {renderInputGroup("四柱反推 Reverse Engineering", (
+            ) : (
+                <div className="space-y-3">
                     <div className="grid grid-cols-4 gap-2">
                          {['年','月','日','时'].map((t,i) => (
-                             <div key={i} className="text-center text-[#8c7b75] text-xs mb-1">{t}柱</div>
+                             <div key={i} className="text-center text-[#8c7b75] text-[10px]">{t}柱</div>
                          ))}
                          <div className="col-span-4 grid grid-cols-4 gap-2">
                              {[
@@ -305,11 +393,11 @@ function App() {
                                  [pillars.hGan, pillars.hZhi, 'hGan', 'hZhi']
                              ].map(([gVal, zVal, gKey, zKey]: any, idx) => (
                                  <div key={idx} className="flex flex-col gap-1">
-                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none"
+                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none text-sm font-bold"
                                         value={gVal} onChange={e => setPillars({...pillars, [gKey]: e.target.value})}>
                                         {GAN.map(g => <option key={g} value={g}>{g}</option>)}
                                      </select>
-                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none"
+                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none text-sm font-bold"
                                         value={zVal} onChange={e => setPillars({...pillars, [zKey]: e.target.value})}>
                                         {ZHI.map(z => <option key={z} value={z}>{z}</option>)}
                                      </select>
@@ -317,197 +405,214 @@ function App() {
                              ))}
                          </div>
                     </div>
-                ))}
-                <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary">
-                    <Search size={16} className="mr-2" /> 查询日期 Match Date
-                </Button>
-                
-                {showDateResults && (
-                    <div className="absolute inset-0 z-50 bg-[#fff8ea] flex flex-col rounded-xl overflow-hidden shadow-2xl border border-[#8B0000]">
-                        <div className="p-3 bg-[#8B0000] text-white flex justify-between items-center">
-                            <h3 className="font-bold text-sm">匹配日期 ({foundDates.length})</h3>
-                            <button onClick={() => setShowDateResults(false)}><X size={18}/></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-white">
-                            {foundDates.length === 0 ? (
-                                <div className="text-center text-stone-500 mt-10 text-sm">未找到匹配日期</div>
-                            ) : (
-                                foundDates.map((d, idx) => (
-                                    <button key={idx} onClick={() => selectFoundDate(d)}
-                                        className="w-full bg-[#fffcf5] border border-[#d6cda4] p-2 rounded text-left hover:bg-[#f5ecd5] transition-colors">
-                                        <div className="text-[#8B0000] font-bold">{d.year}年{d.month}月{d.day}日 <span className="text-stone-600 text-xs ml-2">{d.hour}时</span></div>
-                                        <div className="text-[#5c4033] text-xs mt-1 font-mono bg-[#eaddcf] inline-block px-1 rounded">{d.ganZhi}</div>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                )}
-            </>
-        )}
-      </form>
-      <div className="text-center mt-4">
-          <button onClick={() => setHistoryOpen(true)} className="text-[#8B0000] text-sm flex items-center justify-center gap-2 w-full py-2 opacity-80 hover:opacity-100">
-              <Menu size={16} /> 查看历史档案
-          </button>
-      </div>
-    </div>
-  );
-
-  const renderChart = () => {
-    if (!currentRecord) return null;
-    return (
-      <div className="flex flex-col h-screen w-full bg-[#fff8ea] text-[#1c1917] overflow-hidden">
-        {/* 1. Top Bar */}
-        <div className="bg-[#8B0000] text-[#fff8ea] px-3 py-2 flex justify-between items-center shadow-md z-20 shrink-0">
-          <button onClick={() => setView('form')} className="flex items-center gap-1 text-xs opacity-90 hover:opacity-100"><ArrowLeft size={14} /> 返回</button>
-          <h2 className="font-calligraphy text-xl tracking-widest">八字排盘宝</h2>
-          <button onClick={() => setHistoryOpen(true)}><Menu size={20} /></button>
-        </div>
-
-        {/* 2. Content Area - Flex layout to avoid double scrollbars */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-            
-            {/* Basic Info Strip */}
-            <div className="px-4 py-2 bg-[#fffcf5] border-b border-[#eaddcf] shrink-0 flex justify-between items-start text-xs leading-tight">
-                <div>
-                    <div className="font-bold text-sm text-[#8B0000] mb-0.5">{currentRecord.name} <span className="text-stone-600 font-normal ml-1 text-[10px] border border-stone-300 px-1 rounded-full">{currentRecord.gender}</span></div>
-                    <div className="text-stone-500">{currentRecord.chart.solarDateStr.split(' ')[0]}</div>
-                </div>
-                <div className="text-right">
-                     <div className="text-stone-500">{currentRecord.chart.lunarDateStr.split(' ')[0]}</div>
-                     <div className="text-[#8B0000] font-medium">{currentRecord.chart.solarTermStr}</div>
-                </div>
-            </div>
-
-            {/* Chart Area */}
-            <div className="flex-1 flex flex-col p-2 overflow-hidden">
-                
-                {/* Four Pillars - Compact Box */}
-                <div className="bg-white/80 border border-[#d6cda4] rounded-lg p-2 shadow-sm shrink-0 mb-2">
-                    <div className="grid grid-cols-4 gap-1 divide-x divide-dashed divide-[#eaddcf]">
-                        {['年柱','月柱','日柱','时柱'].map((t,i) => (
-                            <div key={i} className="text-center text-[10px] text-stone-400 mb-1">{t}</div>
-                        ))}
-                        <PillarDisplay title="年" pillar={currentRecord.chart.year} />
-                        <PillarDisplay title="月" pillar={currentRecord.chart.month} />
-                        <PillarDisplay title="日" pillar={currentRecord.chart.day} isDayMaster />
-                        <PillarDisplay title="时" pillar={currentRecord.chart.hour} />
-                    </div>
-                </div>
-
-                {/* Middle Strip */}
-                <div className="flex justify-between text-[10px] text-stone-600 px-2 py-1 bg-[#f5ecd5] rounded mb-2 shrink-0 border border-[#eaddcf]">
-                    <span>胎元: <b>{currentRecord.chart.taiYuan}</b></span>
-                    <span>命宫: <b>{currentRecord.chart.mingGong}</b></span>
-                    <span>身宫: <b>{currentRecord.chart.shenGong}</b></span>
-                </div>
-
-                <div className="text-center text-[10px] text-[#8B0000] font-medium mb-1 shrink-0">{currentRecord.chart.startLuckText}</div>
-
-                {/* Da Yun - Fill remaining space */}
-                <div className="flex-1 bg-white border border-[#d6cda4] rounded-lg shadow-inner overflow-x-auto overflow-y-hidden relative flex flex-col">
-                     {/* Sticky Header for Yun Qian */}
-                     <div className="absolute left-0 top-0 bottom-0 w-8 bg-[#fff8ea] border-r border-[#d6cda4] z-10 flex flex-col items-center pt-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                         <span className="text-[10px] text-[#8B0000] font-bold writing-vertical-lr">大运排盘</span>
-                     </div>
-                     
-                     {/* Scrollable Horizontal Container */}
-                     <div className="flex h-full pl-8 min-w-max">
-                         
-                         {/* Yun Qian Column */}
-                         <div className="w-14 border-r border-dashed border-[#eaddcf] pt-2 flex flex-col items-center bg-stone-50/50">
-                             <span className="text-[10px] text-stone-400 font-bold mb-2">运前</span>
-                             <div className="flex flex-col gap-0.5 w-full items-center overflow-y-auto no-scrollbar">
-                                 {currentRecord.chart.yunQian.map((ln, idx) => (
-                                     <span key={idx} className="text-[9px] text-stone-400">{ln.ganZhi}</span>
-                                 ))}
-                             </div>
-                         </div>
-
-                         {/* Da Yun Columns */}
-                         {currentRecord.chart.daYun.map((yun, idx) => (
-                             <div key={idx} className={`w-14 border-r border-dashed border-[#eaddcf] pt-2 flex flex-col items-center ${idx < 2 ? 'bg-red-50/30' : ''}`}>
-                                 {/* Header */}
-                                 <div className="shrink-0 text-center mb-1">
-                                    <div className="flex flex-col font-serif text-lg font-bold leading-none">
-                                        <span className={ELEMENT_COLORS[yun.stemElement]}>{yun.stem}</span>
-                                        <span className={ELEMENT_COLORS[yun.branchElement]}>{yun.branch}</span>
-                                    </div>
-                                    <div className="text-[9px] text-stone-500 mt-0.5">{yun.startAge}岁</div>
-                                    <div className="text-[8px] text-stone-400 scale-90">{yun.startYear}</div>
-                                 </div>
-                                 
-                                 {/* Liu Nian List - Scrollable if needed but fits mostly */}
-                                 <div className="flex-1 w-full flex flex-col items-center gap-0.5 pb-2 overflow-y-auto no-scrollbar">
-                                    {yun.liuNian.map((ln, lnIdx) => (
-                                        <span key={lnIdx} className={`text-[9px] whitespace-nowrap ${lnIdx === 0 ? 'font-bold text-[#450a0a]' : 'text-stone-500'}`}>
-                                            {ln.ganZhi}
-                                        </span>
-                                    ))}
-                                 </div>
-                             </div>
-                         ))}
-                     </div>
-                </div>
-            </div>
-
-            {/* Bottom Action Bar */}
-            <div className="bg-[#fffcf5] border-t border-[#d6cda4] p-2 flex justify-around items-center gap-4 shrink-0 safe-area-bottom">
-                <button onClick={() => setShowNotesModal(true)} className="flex flex-col items-center text-[#5c4033] text-[10px]">
-                    <div className="p-2 bg-[#eaddcf] rounded-full mb-0.5"><Settings size={16}/></div>
-                    大师批注
-                </button>
-                <button onClick={handleSaveRecord} className="flex-1 bg-[#8B0000] text-[#fff8ea] py-2.5 rounded-full font-bold shadow-md text-sm flex items-center justify-center gap-2">
-                    <Save size={16} /> 保存档案
-                </button>
-            </div>
-
-            {/* Notes Modal */}
-            {showNotesModal && (
-                <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-                    <div className="bg-[#fff8ea] w-full max-w-md h-2/3 sm:h-auto sm:rounded-xl rounded-t-2xl flex flex-col shadow-2xl animate-slideUp">
-                        <div className="p-3 border-b border-[#d6cda4] flex justify-between items-center bg-[#fffcf5] rounded-t-2xl">
-                             <h3 className="font-bold text-[#8B0000]">命理分析与批注</h3>
-                             <button onClick={() => setShowNotesModal(false)}><X size={20} className="text-stone-500"/></button>
-                        </div>
-                        <div className="flex-1 p-4 overflow-y-auto">
-                            <div className="flex justify-between mb-2">
-                                <span className="text-xs text-stone-500">输入你的断语或使用AI辅助</span>
-                                <button onClick={handleAIAnalyze} disabled={isAnalyzing} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded flex items-center gap-1">
-                                    <Settings size={10} /> {isAnalyzing ? '推演中...' : 'AI 详批'}
-                                </button>
+                    <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary" className="text-xs py-2">
+                        <Search size={14} className="mr-2" /> 查询匹配日期
+                    </Button>
+                    
+                    {showDateResults && (
+                        <div className="absolute inset-x-4 top-20 z-50 bg-[#fff8ea] flex flex-col rounded-xl overflow-hidden shadow-2xl border border-[#8B0000] max-h-[60vh]">
+                            <div className="p-2 bg-[#8B0000] text-white flex justify-between items-center">
+                                <h3 className="font-bold text-xs">匹配日期 ({foundDates.length})</h3>
+                                <button onClick={() => setShowDateResults(false)}><X size={16}/></button>
                             </div>
-                            <textarea 
-                                className="w-full h-64 bg-white border border-[#d6cda4] rounded p-3 text-sm text-[#1c1917] shadow-inner focus:border-[#8B0000] outline-none leading-relaxed"
-                                placeholder="在此记录..."
-                                value={noteDraft}
-                                onChange={(e) => setNoteDraft(e.target.value)}
-                            />
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-white">
+                                {foundDates.length === 0 ? (
+                                    <div className="text-center text-stone-500 mt-4 text-xs">未找到匹配日期</div>
+                                ) : (
+                                    foundDates.map((d, idx) => (
+                                        <button key={idx} onClick={() => selectFoundDate(d)}
+                                            className="w-full bg-[#fffcf5] border border-[#d6cda4] p-2 rounded text-left hover:bg-[#f5ecd5] transition-colors">
+                                            <div className="text-[#8B0000] font-bold text-sm">{d.year}年{d.month}月{d.day}日 <span className="text-stone-600 text-xs ml-2">{d.hour}时</span></div>
+                                            <div className="text-[#5c4033] text-xs mt-1 font-mono bg-[#eaddcf] inline-block px-1 rounded">{d.ganZhi}</div>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
                         </div>
-                        <div className="p-3 border-t border-[#d6cda4] bg-[#fffcf5]">
-                            <Button onClick={handleSaveRecord}>保存批注</Button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>
 
-        <HistoryDrawer 
-            isOpen={historyOpen} 
-            onClose={() => setHistoryOpen(false)}
-            records={records}
-            onSelect={loadRecord}
-            onDelete={deleteRecord}
-        />
+        {/* Group Selection */}
+        <div className="relative mb-2 z-20">
+            <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden shadow-sm flex items-center">
+                <div className="bg-[#fffcf5] px-3 py-2 border-r border-[#ebe5ce] flex items-center gap-2 min-w-[70px]">
+                     <span className="w-1 h-3 bg-[#8B0000] rounded-full"></span>
+                     <span className="text-xs text-[#5c4033] font-bold">分组</span>
+                </div>
+                <div className="flex-1 relative">
+                     <input
+                         type="text"
+                         value={input.group}
+                         onChange={(e) => setInput({...input, group: e.target.value})}
+                         onFocus={() => setShowGroupSuggestions(true)}
+                         onBlur={() => setTimeout(() => setShowGroupSuggestions(false), 200)}
+                         placeholder="输入或选择分组 (默认)"
+                         className="w-full h-full px-3 py-2 text-sm bg-transparent outline-none text-[#450a0a]"
+                     />
+                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#d6cda4] pointer-events-none" />
+                </div>
+            </div>
+            {/* Suggestions Dropdown */}
+            {showGroupSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#fffcf5] border border-[#d6cda4] rounded-lg shadow-xl max-h-40 overflow-y-auto z-30">
+                     {['默认分组', ...uniqueGroups].map(g => (
+                         <button
+                             key={g}
+                             type="button"
+                             className="w-full text-left px-4 py-2 text-sm text-[#5c4033] hover:bg-[#eaddcf] hover:text-[#8B0000] transition-colors border-b border-[#f0ebda] last:border-0"
+                             onClick={() => setInput({...input, group: g === '默认分组' ? '' : g})}
+                         >
+                             {g}
+                         </button>
+                     ))}
+                </div>
+            )}
+        </div>
+        
+        {/* Spacer to push buttons to bottom */}
+        <div className="flex-1"></div>
+
+        {/* Bottom Actions */}
+        <div className="flex gap-3 mt-4 pt-2 border-t border-[#d6cda4]/30">
+            <Button onClick={handleArrange} className="flex-[4] py-4 text-lg shadow-lg">
+                立刻排盘
+            </Button>
+            <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setHistoryOpen(true)}
+                className="flex-[1] py-4 text-sm shadow-md border-[#d6cda4]"
+            >
+                命例
+            </Button>
+        </div>
+
+      </form>
+    </div>
+    );
+  };
+
+  const renderChart = () => {
+    if (!currentRecord) return null;
+    const { chart } = currentRecord;
+
+    return (
+      <div className="flex flex-col min-h-screen bg-[#fff8ea] pb-10">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-[#fff8ea]/95 backdrop-blur-sm border-b border-[#d6cda4] px-4 py-3 flex justify-between items-center shadow-sm">
+           <button onClick={() => setView('form')} className="p-2 -ml-2 text-[#8B0000] hover:bg-[#8B0000]/10 rounded-full transition-colors">
+              <ArrowLeft size={24} />
+           </button>
+           <h2 className="font-bold text-lg text-[#450a0a] font-serif">{currentRecord.name}</h2>
+           <button onClick={() => setShowNotesModal(true)} className="p-2 -mr-2 text-[#8B0000] hover:bg-[#8B0000]/10 rounded-full transition-colors">
+              <BookOpen size={24} />
+           </button>
+        </div>
+
+        <div className="px-4 py-4 space-y-6">
+           {/* Basic Info Card */}
+           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf]">
+              <div className="flex justify-between items-start mb-2">
+                 <div className="flex flex-col">
+                    <span className="text-xs text-[#a89f91] mb-1">出生时间</span>
+                    <span className="text-sm font-bold text-[#450a0a]">{chart.solarDateStr}</span>
+                    <span className="text-xs text-[#8c7b75] mt-0.5">{chart.lunarDateStr}</span>
+                 </div>
+                 <div className="text-right">
+                    <span className="inline-block px-2 py-0.5 bg-[#8B0000] text-[#fff8ea] text-xs rounded mb-1">{currentRecord.gender}</span>
+                    <div className="text-xs text-[#5c4033]">{chart.solarTermStr}</div>
+                 </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-[#f5f0e1] flex justify-between text-xs text-[#5c4033]">
+                  <span>{chart.startLuckText}</span>
+                  <span className="font-bold text-[#8B0000]">{chart.renYuanSiLing}</span>
+              </div>
+           </div>
+
+           {/* Four Pillars */}
+           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf]">
+              <div className="grid grid-cols-4 gap-2">
+                 <div className="text-center text-xs text-[#a89f91] mb-1">年柱</div>
+                 <div className="text-center text-xs text-[#a89f91] mb-1">月柱</div>
+                 <div className="text-center text-xs text-[#a89f91] mb-1">日柱</div>
+                 <div className="text-center text-xs text-[#a89f91] mb-1">时柱</div>
+
+                 <PillarDisplay title="年" pillar={chart.year} />
+                 <PillarDisplay title="月" pillar={chart.month} />
+                 <PillarDisplay title="日" pillar={chart.day} isDayMaster />
+                 <PillarDisplay title="时" pillar={chart.hour} kongWang={chart.dayKongWang} />
+              </div>
+           </div>
+
+           {/* Da Yun (Big Luck) */}
+           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf] overflow-hidden">
+               <h3 className="text-sm font-bold text-[#8B0000] mb-3 flex items-center gap-2">
+                  <span className="w-1 h-4 bg-[#8B0000] rounded-full"></span>
+                  大运行程
+               </h3>
+               <div className="overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+                  <div className="flex gap-4 min-w-max">
+                     {chart.daYun.map((yun) => (
+                        <div key={yun.index} className="flex flex-col items-center min-w-[40px]">
+                           <span className="text-[10px] text-[#a89f91] mb-1">{yun.startAge}岁</span>
+                           <span className="text-[10px] text-[#d6cda4] mb-1">{yun.startYear}</span>
+                           <div className="flex flex-col border border-[#f0ebda] rounded bg-[#fffcf5] p-1 w-full items-center">
+                              <span className={`font-bold text-sm ${ELEMENT_COLORS[yun.stemElement]}`}>{yun.stem}</span>
+                              <span className={`font-bold text-sm ${ELEMENT_COLORS[yun.branchElement]}`}>{yun.branch}</span>
+                           </div>
+                           <span className="text-[9px] text-[#8c7b75] mt-1 scale-90">{yun.lifeStage}</span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+           </div>
+           
+           {/* Action Buttons for Chart View */}
+           <div className="flex gap-3">
+               <Button onClick={handleAIAnalyze} disabled={isAnalyzing} className="flex-1 shadow-md">
+                   {isAnalyzing ? "AI 大师推算中..." : "AI 大师详批"}
+               </Button>
+           </div>
+        </div>
+        
+        {/* Notes/AI Modal */}
+        {showNotesModal && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none">
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={() => setShowNotesModal(false)} />
+                <div className="bg-[#fffcf5] w-full max-w-lg h-[80vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col pointer-events-auto animate-slideUp">
+                    <div className="p-4 border-b border-[#d6cda4] flex justify-between items-center bg-[#fff8ea] rounded-t-xl">
+                        <h3 className="font-bold text-[#8B0000]">命理批注 & AI 分析</h3>
+                        <button onClick={() => setShowNotesModal(false)}><X size={20} className="text-[#a89f91]" /></button>
+                    </div>
+                    <textarea
+                        className="flex-1 p-4 bg-transparent outline-none resize-none text-sm leading-relaxed text-[#450a0a]"
+                        placeholder="在此记录断语或等待 AI 分析结果..."
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraft(e.target.value)}
+                    />
+                    <div className="p-4 border-t border-[#d6cda4] bg-[#fff8ea]">
+                        <Button onClick={handleSaveRecord}>保存记录</Button>
+                    </div>
+                </div>
+            </div>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen w-full">
+    <>
+      <HistoryDrawer 
+        isOpen={historyOpen} 
+        onClose={() => setHistoryOpen(false)} 
+        records={records}
+        onSelect={loadRecord}
+        onDelete={deleteRecord}
+      />
       {view === 'form' ? renderForm() : renderChart()}
-    </div>
+    </>
   );
 }
 

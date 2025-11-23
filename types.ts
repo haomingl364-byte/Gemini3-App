@@ -50,6 +50,7 @@ export interface DaYun {
   startAge: number; // 起运岁数
   startYear: number; // 起运年份
   stem: string;
+  stemTenGod: string; // e.g. 正官
   stemElement: ElementType;
   branch: string;
   branchElement: ElementType;
@@ -72,9 +73,8 @@ export interface BaZiChart {
   day: Pillar;
   hour: Pillar;
   
-  taiYuan: string;
-  mingGong: string;
-  shenGong: string;
+  dayKongWang: string; // e.g. "戌亥"
+  renYuanSiLing: string; // 人元司令 (Replaces TaiYuan/MingGong)
   
   daYun: DaYun[]; 
   yunQian: LiuNian[]; // Years before the first Da Yun
@@ -93,6 +93,7 @@ export interface Record {
   chart: BaZiChart;
   notes: string;
   aiAnalysis?: string;
+  group?: string; // Case grouping
 }
 
 export interface UserInput {
@@ -113,6 +114,8 @@ export interface UserInput {
   
   // Settings
   autoSave: boolean;
+  group: string; // Input for grouping
+  processEarlyLateRat: boolean; // Whether to distinguish Early/Late Rat
 
   // Manual Mode
   manualYear: string; // GanZhi string e.g. "甲子"
