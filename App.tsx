@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen } from 'lucide-react';
+import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3 } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
-import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_DAYS, LUNAR_TIMES } from './constants';
+// Added STEM_ELEMENTS and BRANCH_ELEMENTS to imports
+import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_DAYS, LUNAR_TIMES, STEM_ELEMENTS, BRANCH_ELEMENTS } from './constants';
 import { Button } from './components/Button';
-import { PillarDisplay } from './components/PillarDisplay';
 import { HistoryDrawer } from './components/HistoryDrawer';
 
 const initialInput: UserInput = {
@@ -121,10 +121,23 @@ function App() {
   const handleAIAnalyze = async () => {
     if (!currentRecord) return;
     setIsAnalyzing(true);
-    if (!showNotesModal) setShowNotesModal(true);
+    // If we are in the modal, keep it open, otherwise maybe just fill the text area
+    // With the new layout, we might just want to fill the noteDraft and let user see it in the bottom section
+    // But keeping the modal for full view is also fine.
+    // Let's update noteDraft and save.
+    
     const analysis = await analyzeBaZi(currentRecord);
-    const newNotes = (noteDraft ? noteDraft + "\n\n--- AI 大师分析 ---\n" : "--- AI 大师分析 ---\n") + analysis;
+    const timestamp = new Date().toLocaleString();
+    const newNotes = (noteDraft ? noteDraft + `\n\n` : "") + `--- AI 大师分析 (${timestamp}) ---\n` + analysis;
+    
     setNoteDraft(newNotes);
+    
+    // Auto save after AI
+    const updatedRecord = { ...currentRecord, notes: newNotes };
+    const newRecords = records.map(r => r.id === updatedRecord.id ? updatedRecord : r);
+    saveRecordsToStorage(newRecords);
+    setCurrentRecord(updatedRecord);
+    
     setIsAnalyzing(false);
   };
 
@@ -205,9 +218,6 @@ function App() {
     if (input.processEarlyLateRat) {
         return LUNAR_TIMES;
     }
-    // If not processing early/late rat, consolidate 0 (Early Rat) and 23 (Late Rat) into generic Zi.
-    // Usually mapping 0 to standard Zi is safest for "Day N Zi Hour" -> Day N+1 calculation in many systems
-    // But here we just filter the list for UI.
     return LUNAR_TIMES.filter(t => t.value !== 23).map(t => 
         t.value === 0 ? { ...t, name: '子时 (23:00-01:00)' } : t
     );
@@ -256,6 +266,7 @@ function App() {
       </div>
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
+        {/* Form contents omitted for brevity as they are unchanged - keeping same input structure */}
         {renderInputGroup(null, (
             <div className="flex gap-3 items-center">
                 <input type="text" placeholder="请输入姓名" value={input.name}
@@ -296,7 +307,6 @@ function App() {
             {inputMode === 'date' ? (
                 <div className="space-y-3">
                      <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-1 text-center`}>
-                         {/* Year */}
                          <div className="flex flex-col gap-1">
                              <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
@@ -304,8 +314,6 @@ function App() {
                              </select>
                              <label className="text-[9px] text-[#8c7b75]">年</label>
                          </div>
-                         
-                         {/* Month */}
                          <div className="flex flex-col gap-1">
                              <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
@@ -313,8 +321,6 @@ function App() {
                              </select>
                              <label className="text-[9px] text-[#8c7b75]">月</label>
                          </div>
-
-                         {/* Day */}
                          <div className="flex flex-col gap-1">
                              <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
@@ -322,8 +328,6 @@ function App() {
                              </select>
                              <label className="text-[9px] text-[#8c7b75]">日</label>
                          </div>
-
-                         {/* Hour Selection - Conditional Logic */}
                          {input.calendarType === CalendarType.LUNAR ? (
                             <div className="flex flex-col gap-1 col-span-1">
                                 <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
@@ -354,7 +358,6 @@ function App() {
                          )}
                      </div>
                      
-                     {/* Options for Lunar */}
                      {input.calendarType === CalendarType.LUNAR && (
                         <div className="flex justify-end border-t border-[#f0ebda] pt-2">
                              <label className="flex items-center gap-2 cursor-pointer group">
@@ -370,7 +373,6 @@ function App() {
                         </div>
                      )}
 
-                     {/* Merged True Solar Time Selection */}
                      <div className="flex items-center gap-2 pt-2 border-t border-[#f0ebda]">
                         <MapPin className="text-[#8B0000]" size={14} />
                         <select value={input.selectedCityKey} onChange={(e) => setInput({...input, selectedCityKey: e.target.value})}
@@ -434,7 +436,6 @@ function App() {
             )}
         </div>
 
-        {/* Group Selection */}
         <div className="relative mb-2 z-20">
             <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden shadow-sm flex items-center">
                 <div className="bg-[#fffcf5] px-3 py-2 border-r border-[#ebe5ce] flex items-center gap-2 min-w-[70px]">
@@ -454,7 +455,6 @@ function App() {
                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#d6cda4] pointer-events-none" />
                 </div>
             </div>
-            {/* Suggestions Dropdown */}
             {showGroupSuggestions && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-[#fffcf5] border border-[#d6cda4] rounded-lg shadow-xl max-h-40 overflow-y-auto z-30">
                      {['默认分组', ...uniqueGroups].map(g => (
@@ -471,10 +471,8 @@ function App() {
             )}
         </div>
         
-        {/* Spacer to push buttons to bottom */}
         <div className="flex-1"></div>
 
-        {/* Bottom Actions */}
         <div className="flex gap-3 mt-4 pt-2 border-t border-[#d6cda4]/30">
             <Button onClick={handleArrange} className="flex-[4] py-4 text-lg shadow-lg">
                 立刻排盘
@@ -497,107 +495,200 @@ function App() {
   const renderChart = () => {
     if (!currentRecord) return null;
     const { chart } = currentRecord;
+    const currentYear = new Date().getFullYear();
 
     return (
-      <div className="flex flex-col min-h-screen bg-[#fff8ea] pb-10">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-[#fff8ea]/95 backdrop-blur-sm border-b border-[#d6cda4] px-4 py-3 flex justify-between items-center shadow-sm">
-           <button onClick={() => setView('form')} className="p-2 -ml-2 text-[#8B0000] hover:bg-[#8B0000]/10 rounded-full transition-colors">
-              <ArrowLeft size={24} />
+      <div className="flex flex-col min-h-screen bg-[#fffbe6] pb-20 font-sans text-[#1c1917] select-none">
+        {/* Custom Header matching the image */}
+        <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-12 px-2 shadow-md">
+           <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
+              返回
            </button>
-           <h2 className="font-bold text-lg text-[#450a0a] font-serif">{currentRecord.name}</h2>
-           <button onClick={() => setShowNotesModal(true)} className="p-2 -mr-2 text-[#8B0000] hover:bg-[#8B0000]/10 rounded-full transition-colors">
-              <BookOpen size={24} />
+           <h1 className="font-calligraphy text-2xl text-white tracking-widest drop-shadow-md">八字排盘宝</h1>
+           <button onClick={() => setHistoryOpen(true)} className="p-1.5 bg-[#b93b3b] rounded border border-[#cf5454] text-white shadow">
+              <Menu size={20} />
            </button>
         </div>
 
-        <div className="px-4 py-4 space-y-6">
-           {/* Basic Info Card */}
-           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf]">
-              <div className="flex justify-between items-start mb-2">
-                 <div className="flex flex-col">
-                    <span className="text-xs text-[#a89f91] mb-1">出生时间</span>
-                    <span className="text-sm font-bold text-[#450a0a]">{chart.solarDateStr}</span>
-                    <span className="text-xs text-[#8c7b75] mt-0.5">{chart.lunarDateStr}</span>
-                 </div>
-                 <div className="text-right">
-                    <span className="inline-block px-2 py-0.5 bg-[#8B0000] text-[#fff8ea] text-xs rounded mb-1">{currentRecord.gender}</span>
-                    <div className="text-xs text-[#5c4033]">{chart.solarTermStr}</div>
-                 </div>
-              </div>
-              <div className="mt-2 pt-2 border-t border-[#f5f0e1] flex justify-between text-xs text-[#5c4033]">
-                  <span>{chart.startLuckText}</span>
-                  <span className="font-bold text-[#8B0000]">{chart.renYuanSiLing}</span>
-              </div>
-           </div>
+        <div className="flex-1 overflow-y-auto p-2">
+            
+            {/* Top Text Info Section */}
+            <div className="space-y-1 text-[13px] leading-tight text-[#333]">
+                <div>出生时间：{chart.solarDateStr}</div>
+                <div>出生时间：{chart.lunarDateStr}</div>
+                <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
+            </div>
 
-           {/* Four Pillars */}
-           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf]">
-              <div className="grid grid-cols-4 gap-2">
-                 <div className="text-center text-xs text-[#a89f91] mb-1">年柱</div>
-                 <div className="text-center text-xs text-[#a89f91] mb-1">月柱</div>
-                 <div className="text-center text-xs text-[#a89f91] mb-1">日柱</div>
-                 <div className="text-center text-xs text-[#a89f91] mb-1">时柱</div>
-
-                 <PillarDisplay title="年" pillar={chart.year} />
-                 <PillarDisplay title="月" pillar={chart.month} />
-                 <PillarDisplay title="日" pillar={chart.day} isDayMaster />
-                 <PillarDisplay title="时" pillar={chart.hour} kongWang={chart.dayKongWang} />
-              </div>
-           </div>
-
-           {/* Da Yun (Big Luck) */}
-           <div className="bg-white rounded-xl p-4 shadow-sm border border-[#eaddcf] overflow-hidden">
-               <h3 className="text-sm font-bold text-[#8B0000] mb-3 flex items-center gap-2">
-                  <span className="w-1 h-4 bg-[#8B0000] rounded-full"></span>
-                  大运行程
-               </h3>
-               <div className="overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-                  <div className="flex gap-4 min-w-max">
-                     {chart.daYun.map((yun) => (
-                        <div key={yun.index} className="flex flex-col items-center min-w-[40px]">
-                           <span className="text-[10px] text-[#a89f91] mb-1">{yun.startAge}岁</span>
-                           <span className="text-[10px] text-[#d6cda4] mb-1">{yun.startYear}</span>
-                           <div className="flex flex-col border border-[#f0ebda] rounded bg-[#fffcf5] p-1 w-full items-center">
-                              <span className={`font-bold text-sm ${ELEMENT_COLORS[yun.stemElement]}`}>{yun.stem}</span>
-                              <span className={`font-bold text-sm ${ELEMENT_COLORS[yun.branchElement]}`}>{yun.branch}</span>
-                           </div>
-                           <span className="text-[9px] text-[#8c7b75] mt-1 scale-90">{yun.lifeStage}</span>
-                        </div>
-                     ))}
-                  </div>
-               </div>
-           </div>
-           
-           {/* Action Buttons for Chart View */}
-           <div className="flex gap-3">
-               <Button onClick={handleAIAnalyze} disabled={isAnalyzing} className="flex-1 shadow-md">
-                   {isAnalyzing ? "AI 大师推算中..." : "AI 大师详批"}
-               </Button>
-           </div>
-        </div>
-        
-        {/* Notes/AI Modal */}
-        {showNotesModal && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none">
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={() => setShowNotesModal(false)} />
-                <div className="bg-[#fffcf5] w-full max-w-lg h-[80vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col pointer-events-auto animate-slideUp">
-                    <div className="p-4 border-b border-[#d6cda4] flex justify-between items-center bg-[#fff8ea] rounded-t-xl">
-                        <h3 className="font-bold text-[#8B0000]">命理批注 & AI 分析</h3>
-                        <button onClick={() => setShowNotesModal(false)}><X size={20} className="text-[#a89f91]" /></button>
+            {/* Four Pillars Section - Compact & Centered */}
+            <div className="mt-2 flex justify-center">
+                <div className="w-full max-w-sm flex">
+                    {/* Gender/Mode Label - Left Column - Aligned with Na Yin Row */}
+                    <div className="w-10 flex items-start text-[15px] font-bold text-[#1c1917]">
+                        {currentRecord.gender}：
                     </div>
-                    <textarea
-                        className="flex-1 p-4 bg-transparent outline-none resize-none text-sm leading-relaxed text-[#450a0a]"
-                        placeholder="在此记录断语或等待 AI 分析结果..."
-                        value={noteDraft}
-                        onChange={(e) => setNoteDraft(e.target.value)}
-                    />
-                    <div className="p-4 border-t border-[#d6cda4] bg-[#fff8ea]">
-                        <Button onClick={handleSaveRecord}>保存记录</Button>
+
+                    {/* Pillars Grid */}
+                    <div className="flex-1 grid grid-cols-4 gap-1 text-center relative">
+                         {/* Na Yin Row */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`ny-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.naYin}</div>
+                         ))}
+                         
+                         {/* Ten God Row */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`tg-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.stemTenGod}</div>
+                         ))}
+                         
+                         {/* Stem Row */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`s-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.stemElement]}`}>
+                                 {p.stem}
+                             </div>
+                         ))}
+                         
+                         {/* Branch Row */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]}`}>
+                                 {p.branch}
+                             </div>
+                         ))}
+                         
+                         {/* Hidden Stems List */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`hs-${i}`} className="flex flex-col items-center mt-1 space-y-0.5">
+                                 {p.hiddenStems.map((hs, idx) => (
+                                     <div key={idx} className="flex gap-0.5 items-center text-[11px] leading-none">
+                                         <span className={`${ELEMENT_COLORS[hs.element]}`}>{hs.stem}</span>
+                                         <span className="text-[#666] scale-90 origin-left">{hs.tenGod}</span>
+                                     </div>
+                                 ))}
+                             </div>
+                         ))}
+                         
+                         {/* Life Stage */}
+                         {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
+                             <div key={`ls-${i}`} className="mt-2 text-[12px] text-[#333]">{p.lifeStage}</div>
+                         ))}
+
+                         {/* Kong Wang Overlay (Right of Day/Hour) */}
+                         <div className="absolute right-0 top-16 text-[11px] text-red-600 transform translate-x-2">
+                             [{chart.dayKongWang}空]
+                         </div>
                     </div>
                 </div>
             </div>
-        )}
+
+            {/* Middle Info Block - Minimal, removed ShenSha */}
+            <div className="mt-3 space-y-1 text-[12px] leading-snug">
+                <div className="flex gap-2">
+                    <span className="text-green-700">司令: {chart.renYuanSiLing} [设置]</span>
+                </div>
+            </div>
+
+            {/* Da Yun Header */}
+            <div className="mt-3 text-[13px]">
+                <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
+                <div className="text-[#333] text-[12px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#961c1c] font-bold">丙申</span></div>
+            </div>
+
+            {/* Da Yun & Liu Nian Matrix - Horizontal Mode */}
+            <div className="mt-2 overflow-x-auto">
+                <div className="min-w-max">
+                     <div className="flex">
+                         {/* Header Column (Yun Qian) */}
+                         <div className="flex flex-col w-12 items-center shrink-0">
+                             <div className="h-4"></div>
+                             <div className="h-4"></div>
+                             <div className="h-4"></div>
+                             <div className="h-8 flex items-center justify-center font-bold text-base text-[#1c1917]">运前</div>
+                             <div className="h-4 text-[11px] text-[#333]">1</div>
+                             <div className="h-4 text-[11px] text-[#333]">{chart.yunQian[0]?.year}</div>
+                             {/* Vertical Liu Nian list for Yun Qian (Horizontal Text) */}
+                             <div className="mt-2 flex flex-col items-center gap-1">
+                                 {chart.yunQian.map((yn, idx) => {
+                                     const isCurrent = yn.year === currentYear;
+                                     return (
+                                         <div key={idx} className={`flex items-center justify-center h-[18px] ${isCurrent ? 'text-[#961c1c] font-bold' : 'text-[#333]'}`}>
+                                             <span className="text-[13px] tracking-widest">{yn.ganZhi}</span>
+                                         </div>
+                                     );
+                                 })}
+                             </div>
+                         </div>
+
+                         {/* Da Yun Columns */}
+                         {chart.daYun.map((yun, idx) => {
+                             // Highlight Logic
+                             const nextYun = chart.daYun[idx + 1];
+                             const isCurrentDaYun = currentYear >= yun.startYear && (!nextYun || currentYear < nextYun.startYear);
+                             
+                             return (
+                             <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
+                                 {/* Removed Life Stage Row */}
+                                 <div className="h-4 text-[11px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin.substring(0,3)}</div>
+                                 <div className="h-4 text-[11px] text-[#333]">{yun.stemTenGod}</div>
+                                 
+                                 {/* Da Yun Pillar */}
+                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? 'text-[#961c1c] font-bold' : 'text-[#1c1917]'}`}>
+                                     <span className="text-lg tracking-wide">{yun.ganZhi}</span>
+                                 </div>
+                                 
+                                 {/* Age & Year */}
+                                 <div className="h-4 text-[11px] text-[#333]">{yun.startAge}</div>
+                                 <div className="h-4 text-[11px] text-[#333]">{yun.startYear}</div>
+
+                                 {/* Liu Nian Vertical List */}
+                                 <div className="mt-2 flex flex-col items-center gap-1">
+                                     {yun.liuNian.map((ln, lnIdx) => {
+                                         const isCurrentLiuNian = ln.year === currentYear;
+                                         const textColor = isCurrentLiuNian ? 'text-[#961c1c] font-bold' : 'text-[#333]';
+                                         
+                                         return (
+                                            <div key={lnIdx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
+                                                <span className="text-[13px] tracking-widest">{ln.ganZhi}</span>
+                                            </div>
+                                         );
+                                     })}
+                                 </div>
+                             </div>
+                         )})}
+                     </div>
+                </div>
+            </div>
+
+            {/* Master's Comment / Notes Section - Integrated into Bottom */}
+            <div className="mt-8 mb-6 px-2">
+                <div className="bg-white/60 border border-[#d6cda4] rounded-lg p-3 shadow-sm">
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-[#e5e0d0]">
+                        <h3 className="font-bold text-[#8B0000] text-sm flex items-center gap-2">
+                            <Edit3 size={14}/> 命理师批注
+                        </h3>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={handleAIAnalyze} 
+                                className="text-[10px] px-2 py-1 bg-[#eaddcf] text-[#5c4033] rounded hover:bg-[#d6cda4] transition-colors"
+                                disabled={isAnalyzing}
+                            >
+                                {isAnalyzing ? "AI推算中..." : "AI辅助批注"}
+                            </button>
+                            <button 
+                                onClick={handleSaveRecord} 
+                                className="text-[10px] px-3 py-1 bg-[#8B0000] text-white rounded shadow-sm hover:bg-[#7a0000] transition-colors"
+                            >
+                                保存
+                            </button>
+                        </div>
+                    </div>
+                    <textarea
+                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-sm leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
+                        placeholder="在此输入命理分析..."
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraft(e.target.value)}
+                    />
+                </div>
+            </div>
+
+        </div>
       </div>
     );
   };

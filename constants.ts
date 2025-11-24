@@ -5,9 +5,9 @@ export const APP_STORAGE_KEY = 'zen_bazi_records_v2';
 export const ELEMENT_COLORS = {
   wood: 'text-green-600',  // 甲乙寅卯 - Green
   fire: 'text-red-600',    // 丙丁巳午 - Red
-  earth: 'text-yellow-700', // 戊己辰戌丑未 - Brown/Ochre
-  metal: 'text-indigo-600', // 庚辛申酉 - Blue/Indigo (Visual match to screenshot)
-  water: 'text-stone-900', // 壬癸亥子 - Black/Dark (Visual contrast)
+  earth: 'text-amber-700', // 戊己辰戌丑未 - Brown/Ochre
+  metal: 'text-yellow-600', // 庚辛申酉 - Gold/Yellow-Ochre (Updated to match image)
+  water: 'text-black',     // 壬癸亥子 - Black (Updated to match image)
 };
 
 export const STEM_ELEMENTS: {[key: string]: string} = {
