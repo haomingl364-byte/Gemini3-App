@@ -44,6 +44,23 @@ const getLifeStage = (gan: string, zhi: string): string => {
   return CHANG_SHENG[offset % 12];
 };
 
+const SHI_SHEN_MAP: {[key: string]: string} = {
+  '甲甲': '比肩', '甲乙': '劫财', '甲丙': '食神', '甲丁': '伤官', '甲戊': '偏财', '甲己': '正财', '甲庚': '七杀', '甲辛': '正官', '甲壬': '偏印', '甲癸': '正印',
+  '乙甲': '劫财', '乙乙': '比肩', '乙丙': '伤官', '乙丁': '食神', '乙戊': '正财', '乙己': '偏财', '乙庚': '正官', '乙辛': '七杀', '乙壬': '正印', '乙癸': '偏印',
+  '丙甲': '偏印', '丙乙': '正印', '丙丙': '比肩', '丙丁': '劫财', '丙戊': '食神', '丙己': '伤官', '丙庚': '偏财', '丙辛': '正财', '丙壬': '七杀', '丙癸': '正官',
+  '丁甲': '正印', '丁乙': '偏印', '丁丙': '劫财', '丁丁': '比肩', '丁戊': '伤官', '丁己': '食神', '丁庚': '正财', '丁辛': '偏财', '丁壬': '正官', '丁癸': '七杀',
+  '戊甲': '七杀', '戊乙': '正官', '戊丙': '偏印', '戊丁': '正印', '戊戊': '比肩', '戊己': '劫财', '戊庚': '食神', '戊辛': '伤官', '戊壬': '偏财', '戊癸': '正财',
+  '己甲': '正官', '己乙': '七杀', '己丙': '正印', '己丁': '偏印', '己戊': '劫财', '己己': '比肩', '己庚': '伤官', '己辛': '食神', '己壬': '正财', '己癸': '偏财',
+  '庚甲': '偏财', '庚乙': '正财', '庚丙': '七杀', '庚丁': '正官', '庚戊': '偏印', '庚己': '正印', '庚庚': '比肩', '庚辛': '劫财', '庚壬': '食神', '庚癸': '伤官',
+  '辛甲': '正财', '辛乙': '偏财', '辛丙': '正官', '辛丁': '七杀', '辛戊': '正印', '辛己': '偏印', '辛庚': '劫财', '辛辛': '比肩', '辛壬': '伤官', '辛癸': '食神',
+  '壬甲': '食神', '壬乙': '伤官', '壬丙': '偏财', '壬丁': '正财', '壬戊': '七杀', '壬己': '正官', '壬庚': '偏印', '壬辛': '正印', '壬壬': '比肩', '壬癸': '劫财',
+  '癸甲': '伤官', '癸乙': '食神', '癸丙': '正财', '癸丁': '偏财', '癸戊': '正官', '癸己': '七杀', '癸庚': '正印', '癸辛': '偏印', '癸壬': '劫财', '癸癸': '比肩'
+};
+
+const getShiShen = (dayMaster: string, targetStem: string): string => {
+    return SHI_SHEN_MAP[dayMaster + targetStem] || '';
+};
+
 const getShenSha = (pillarBranch: string, yearBranch: string, dayBranch: string, dayStem: string): string[] => {
   const list: string[] = [];
   const zhi = pillarBranch;
@@ -155,8 +172,6 @@ const createPillar = (
     shenSha = getShenSha(branch, yearBranch, dayBranch, dayMaster);
     const kongWangList = eightChar.getDayXunKong();
     isKongWang = kongWangList.includes(branch);
-    // We do not add '空亡' to shenSha list here to avoid clutter, handled by UI externally if needed, 
-    // but PillarDisplay uses the isKongWang boolean.
   }
 
   return {
@@ -368,12 +383,7 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
     const branch = ganZhi.substring(1, 2);
     
     // Calculate Ten God of Da Yun Stem relative to Day Master
-    let stemTenGod = '';
-    try {
-        stemTenGod = LunarUtil.getShiShen(dayMaster, stem);
-    } catch (e) {
-        stemTenGod = '';
-    }
+    let stemTenGod = getShiShen(dayMaster, stem);
 
     const liuNianList: LiuNian[] = [];
     const liuNianArr = dy.getLiuNian(); 
@@ -389,7 +399,7 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
     const yunLifeStage = getLifeStage(dayMaster, branch);
     
     let yunNaYin = '';
-    try { yunNaYin = LunarUtil.getNaYin(ganZhi); } catch(e) { yunNaYin = '未知'; }
+    try { yunNaYin = LunarUtil.getNaYin(ganZhi); } catch(e) { yunNaYin = ''; }
 
     daYunList.push({
       index: i,

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3 } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
@@ -599,16 +600,16 @@ function App() {
                 <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
             </div>
 
-            {/* Four Pillars Section - Compact & Centered */}
-            <div className="mt-2 flex justify-center">
-                <div className="w-full max-w-[340px] flex">
+            {/* Four Pillars Section - Left Aligned Layout */}
+            <div className="mt-2 pl-2">
+                <div className="flex gap-2">
                     {/* Gender/Mode Label - Left Column - Aligned with Na Yin Row */}
-                    <div className="w-14 flex items-start justify-end pr-1 text-[13px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
+                    <div className="w-10 flex items-start justify-start text-[13px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
                         {currentRecord.gender}：
                     </div>
 
                     {/* Pillars Grid */}
-                    <div className="flex-1 grid grid-cols-4 gap-0 text-center relative">
+                    <div className="grid grid-cols-4 gap-0 text-center relative w-[280px]">
                          {/* Na Yin Row */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ny-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.naYin}</div>
@@ -651,7 +652,7 @@ function App() {
                          ))}
 
                          {/* Kong Wang Overlay (Right of Day/Hour) */}
-                         <div className="absolute right-0 top-16 text-[11px] text-red-600 transform translate-x-2">
+                         <div className="absolute right-0 top-16 text-[11px] text-red-600 transform translate-x-8">
                              [{chart.dayKongWang}空]
                          </div>
                     </div>
@@ -659,14 +660,14 @@ function App() {
             </div>
 
             {/* Middle Info Block - Minimal, removed ShenSha */}
-            <div className="mt-3 space-y-1 text-[12px] leading-snug">
+            <div className="mt-1 space-y-1 text-[12px] leading-snug">
                 <div className="flex gap-2">
                     <span className="text-green-700">司令: {chart.renYuanSiLing} [设置]</span>
                 </div>
             </div>
 
             {/* Da Yun Header */}
-            <div className="mt-3 text-[13px]">
+            <div className="mt-1 text-[13px]">
                 <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
                 <div className="text-[#333] text-[12px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#961c1c] font-bold">丙申</span></div>
             </div>
@@ -679,7 +680,7 @@ function App() {
                          <div className="flex flex-col w-12 items-center shrink-0">
                              <div className="h-4"></div>
                              <div className="h-4"></div>
-                             <div className="h-4"></div>
+                             {/* Removed one spacer here to fix alignment */}
                              <div className="h-8 flex items-center justify-center font-bold text-base text-[#1c1917]">运前</div>
                              <div className="h-4 text-[11px] text-[#333]">1</div>
                              <div className="h-4 text-[11px] text-[#333]">{chart.yunQian[0]?.year}</div>
@@ -709,7 +710,7 @@ function App() {
                                  <div className="h-4 text-[11px] text-[#333]">{yun.stemTenGod}</div>
                                  
                                  {/* Da Yun Pillar */}
-                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? 'text-[#961c1c] font-bold' : 'text-[#1c1917]'}`}>
+                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? 'text-[#961c1c]' : 'text-[#1c1917]'} font-bold`}>
                                      <span className="text-lg tracking-wide">{yun.ganZhi}</span>
                                  </div>
                                  
