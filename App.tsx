@@ -1,13 +1,12 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3 } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
-// Added STEM_ELEMENTS and BRANCH_ELEMENTS to imports
 import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_DAYS, LUNAR_TIMES, STEM_ELEMENTS, BRANCH_ELEMENTS } from './constants';
 import { Button } from './components/Button';
 import { HistoryDrawer } from './components/HistoryDrawer';
+import { PillarDisplay } from './components/PillarDisplay';
 
 const initialInput: UserInput = {
   name: '',
@@ -36,11 +35,12 @@ interface PillarSelection {
     hGan: string; hZhi: string;
 }
 
+// Initial pillars set to empty strings to represent "-"
 const initialPillars: PillarSelection = {
-    yGan: '甲', yZhi: '子',
-    mGan: '丙', mZhi: '寅',
-    dGan: '戊', dZhi: '辰',
-    hGan: '壬', hZhi: '子'
+    yGan: '', yZhi: '',
+    mGan: '', mZhi: '',
+    dGan: '', dZhi: '',
+    hGan: '', hZhi: ''
 };
 
 function App() {
@@ -73,17 +73,44 @@ function App() {
   }, []);
 
   const saveRecordsToStorage = (newRecords: Record[]) => {
-    localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(newRecords));
-    setRecords(newRecords);
+    try {
+        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(newRecords));
+        setRecords(newRecords);
+    } catch (e) {
+        console.error("Save failed", e);
+        alert("保存失败，可能是存储空间不足");
+    }
+  };
+
+  // Helper to generate next case name
+  const generateNextCaseName = (currentRecords: Record[]) => {
+      let maxNum = 0;
+      const regex = /^案例(\d+)$/;
+      currentRecords.forEach(r => {
+          const match = r.name.match(regex);
+          if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+          }
+      });
+      return `案例${maxNum + 1}`;
   };
 
   const handleArrange = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.name) { alert("请输入姓名"); return; }
-    const chart = calculateBaZi(input);
+    
+    // Auto name generation logic
+    let finalName = input.name.trim();
+    if (!finalName) {
+        finalName = generateNextCaseName(records);
+        // Update input state solely for UI consistency, though not strictly required if we use finalName
+        setInput(prev => ({ ...prev, name: finalName }));
+    }
+
+    const chart = calculateBaZi({ ...input, name: finalName });
     const newRecord: Record = {
       id: Date.now().toString(),
-      name: input.name || '未命名',
+      name: finalName,
       gender: input.gender,
       birthDate: `${input.year}-${input.month}-${input.day}`,
       birthTime: `${input.hour}:${input.minute}`,
@@ -96,6 +123,7 @@ function App() {
     };
     setCurrentRecord(newRecord);
     setNoteDraft('');
+    
     if (input.autoSave) {
         const newRecs = [newRecord, ...records];
         saveRecordsToStorage(newRecs);
@@ -121,18 +149,11 @@ function App() {
   const handleAIAnalyze = async () => {
     if (!currentRecord) return;
     setIsAnalyzing(true);
-    // If we are in the modal, keep it open, otherwise maybe just fill the text area
-    // With the new layout, we might just want to fill the noteDraft and let user see it in the bottom section
-    // But keeping the modal for full view is also fine.
-    // Let's update noteDraft and save.
-    
     const analysis = await analyzeBaZi(currentRecord);
     const timestamp = new Date().toLocaleString();
     const newNotes = (noteDraft ? noteDraft + `\n\n` : "") + `--- AI 大师分析 (${timestamp}) ---\n` + analysis;
     
     setNoteDraft(newNotes);
-    
-    // Auto save after AI
     const updatedRecord = { ...currentRecord, notes: newNotes };
     const newRecords = records.map(r => r.id === updatedRecord.id ? updatedRecord : r);
     saveRecordsToStorage(newRecords);
@@ -171,11 +192,18 @@ function App() {
   };
 
   const handleSearchDates = () => {
+      // Validate all fields selected
+      const p = pillars;
+      if (!p.yGan || !p.yZhi || !p.mGan || !p.mZhi || !p.dGan || !p.dZhi || !p.hGan || !p.hZhi) {
+          alert("请完整选择四柱干支");
+          return;
+      }
+
       setIsSearching(true);
       setTimeout(() => {
           const results = findDatesFromPillars(
-              pillars.yGan, pillars.yZhi, pillars.mGan, pillars.mZhi,
-              pillars.dGan, pillars.dZhi, pillars.hGan, pillars.hZhi
+              p.yGan, p.yZhi, p.mGan, p.mZhi,
+              p.dGan, p.dZhi, p.hGan, p.hZhi
           );
           setFoundDates(results);
           setIsSearching(false);
@@ -213,6 +241,22 @@ function App() {
       return input.calendarType === CalendarType.SOLAR ? 'SOLAR' : 'LUNAR';
   };
 
+  // --- Helpers for Filtering & Options ---
+
+  // Filter Branches based on Stem (Yang pairs with Yang, Yin with Yin)
+  const getFilteredZhi = (selectedGan: string) => {
+      if (!selectedGan) return []; // If no stem, maybe show none or all? Let's show empty to force Stem first.
+      
+      const ganIdx = GAN.indexOf(selectedGan);
+      if (ganIdx === -1) return ZHI; // Should not happen
+
+      // Even Gan (0, 2...) are Yang -> Filter for Even Zhi
+      // Odd Gan (1, 3...) are Yin -> Filter for Odd Zhi
+      const isYang = ganIdx % 2 === 0;
+      
+      return ZHI.filter((_, idx) => (idx % 2 === 0) === isYang);
+  };
+
   // --- Computed Options ---
   const lunarTimeOptions = useMemo(() => {
     if (input.processEarlyLateRat) {
@@ -226,17 +270,10 @@ function App() {
 
   // --- UI Renders ---
 
-  const renderInputGroup = (label: string | null, content: React.ReactNode) => (
-    <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden mb-2 shadow-sm">
-       {label && (
-           <div className="bg-[#fffcf5] px-3 py-1.5 border-b border-[#ebe5ce] flex items-center gap-2">
-              <span className="w-1 h-3 bg-[#8B0000] rounded-full"></span>
-              <span className="text-xs text-[#5c4033] font-bold tracking-wider">{label}</span>
-           </div>
-       )}
-       <div className="p-2">
-          {content}
-       </div>
+  // Minimalist Input Group (No Box)
+  const renderInputGroup = (content: React.ReactNode) => (
+    <div className="mb-4 px-2">
+       {content}
     </div>
   );
 
@@ -259,33 +296,39 @@ function App() {
         .sort();
     
     return (
-    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-2 pb-6 font-sans">
-      <div className="text-center mb-1">
+    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-4 pb-6 font-sans bg-[#fff8ea]">
+      <div className="text-center mb-4">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
       </div>
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
-        {/* Form contents omitted for brevity as they are unchanged - keeping same input structure */}
-        {renderInputGroup(null, (
-            <div className="flex gap-3 items-center">
-                <input type="text" placeholder="请输入姓名" value={input.name}
+        
+        {/* Name & Gender - Minimal */}
+        {renderInputGroup(
+            <div className="flex gap-4 items-end border-b border-[#d6cda4] pb-2">
+                <input type="text" placeholder="请输入姓名 (为空则自动命名)" value={input.name}
                     onChange={e => setInput({ ...input, name: e.target.value })}
-                    className="flex-1 bg-transparent border-b border-[#d6cda4] py-1 px-2 text-[#450a0a] focus:border-[#8B0000] outline-none text-base placeholder-[#a89f91]"
+                    className="flex-1 bg-transparent text-[#450a0a] focus:text-[#8B0000] outline-none text-lg placeholder-[#d6cda4]"
                 />
-                <div className="flex bg-[#eaddcf] rounded-lg p-0.5 gap-0.5 shrink-0">
+                <div className="flex gap-2 shrink-0">
                     {[Gender.MALE, Gender.FEMALE].map((g) => (
                     <button key={g} type="button" onClick={() => setInput({ ...input, gender: g })}
-                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${input.gender === g ? 'bg-[#8B0000] text-[#fff8ea]' : 'text-[#5c4033]'}`}>
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+                            input.gender === g 
+                            ? 'bg-[#8B0000] text-[#fff8ea] border-[#8B0000]' 
+                            : 'bg-transparent text-[#a89f91] border-transparent hover:text-[#5c4033]'
+                        }`}>
                         {g}
                     </button>
                     ))}
                 </div>
             </div>
-        ))}
+        )}
 
-        <div className="flex justify-center mb-2">
-            <div className="bg-[#eaddcf] rounded-full p-0.5 flex gap-1 border border-[#d6cda4] shadow-sm">
+        {/* Mode Switcher - Minimal Pills */}
+        <div className="flex justify-center mb-6">
+            <div className="flex gap-1">
                 {[
                     { key: 'SOLAR', label: '公历' },
                     { key: 'LUNAR', label: '农历' },
@@ -295,7 +338,11 @@ function App() {
                         key={mode.key} 
                         type="button" 
                         onClick={() => handleModeSwitch(mode.key as any)}
-                        className={`px-4 py-1 rounded-full text-xs font-bold transition-all ${getCurrentModeKey() === mode.key ? 'bg-white text-[#8B0000] shadow-sm' : 'text-[#5c4033] hover:text-[#8B0000]/70'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                            getCurrentModeKey() === mode.key 
+                            ? 'text-[#8B0000] bg-[#eaddcf]/50' 
+                            : 'text-[#a89f91] hover:text-[#5c4033]'
+                        }`}
                     >
                         {mode.label}
                     </button>
@@ -303,111 +350,145 @@ function App() {
             </div>
         </div>
 
-        <div className="bg-white/80 border border-[#d6cda4] rounded-lg p-3 shadow-sm mb-2">
+        {/* Dynamic Content Area */}
+        <div className="px-2 mb-4">
             {inputMode === 'date' ? (
-                <div className="space-y-3">
-                     <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-1 text-center`}>
-                         <div className="flex flex-col gap-1">
+                <div className="space-y-6">
+                     {/* Date Selectors */}
+                     <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-2 text-center`}>
+                         {/* Year */}
+                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
                              <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
                                  {years.map(y => <option key={y} value={y}>{y}</option>)}
                              </select>
-                             <label className="text-[9px] text-[#8c7b75]">年</label>
                          </div>
-                         <div className="flex flex-col gap-1">
+                         
+                         {/* Month */}
+                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
                              <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
                                  {getMonthOptions()}
                              </select>
-                             <label className="text-[9px] text-[#8c7b75]">月</label>
                          </div>
-                         <div className="flex flex-col gap-1">
+
+                         {/* Day */}
+                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
                              <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
                                  {getDayOptions()}
                              </select>
-                             <label className="text-[9px] text-[#8c7b75]">日</label>
                          </div>
+
+                         {/* Hour */}
                          {input.calendarType === CalendarType.LUNAR ? (
-                            <div className="flex flex-col gap-1 col-span-1">
+                            <div className="flex flex-col gap-1 col-span-1 border-b border-[#d6cda4]">
                                 <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                    className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
+                                    className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
                                     {lunarTimeOptions.map((t) => (
-                                        <option key={t.value} value={t.value}>{t.name}</option>
+                                        <option key={t.value} value={t.value}>{t.name.split(' ')[0]}</option>
                                     ))}
                                 </select>
-                                <label className="text-[9px] text-[#8c7b75]">时辰</label>
                             </div>
                          ) : (
                             <>
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
                                      <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
-                                         {hours.map(h => <option key={h} value={h}>{h}点</option>)}
+                                         className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                         {hours.map(h => <option key={h} value={h}>{h}</option>)}
                                      </select>
-                                     <label className="text-[9px] text-[#8c7b75]">时</label>
                                 </div>
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
                                      <select value={input.minute} onChange={(e) => setInput({...input, minute:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-sm p-1 border-b border-[#d6cda4] rounded-none text-center appearance-none outline-none focus:border-[#8B0000]">
-                                         {minutes.map(m => <option key={m} value={m}>{m}分</option>)}
+                                         className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                         {minutes.map(m => <option key={m} value={m}>{m}</option>)}
                                      </select>
-                                     <label className="text-[9px] text-[#8c7b75]">分</label>
                                 </div>
                             </>
                          )}
                      </div>
                      
-                     {input.calendarType === CalendarType.LUNAR && (
-                        <div className="flex justify-end border-t border-[#f0ebda] pt-2">
-                             <label className="flex items-center gap-2 cursor-pointer group">
-                                <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
-                                    {input.processEarlyLateRat && <Check size={10} className="text-white" />}
-                                </div>
-                                <input type="checkbox" className="hidden" 
-                                    checked={input.processEarlyLateRat} 
-                                    onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
-                                />
-                                <span className="text-[10px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">区分早晚子时</span>
-                             </label>
-                        </div>
-                     )}
+                     {/* Early/Late Rat Checkbox - Available for BOTH modes */}
+                     <div className="flex justify-end pt-2">
+                         <label className="flex items-center gap-2 cursor-pointer group select-none">
+                            <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                {input.processEarlyLateRat && <Check size={10} className="text-white" />}
+                            </div>
+                            <input type="checkbox" className="hidden" 
+                                checked={input.processEarlyLateRat} 
+                                onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
+                            />
+                            <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">区分早晚子时</span>
+                         </label>
+                     </div>
 
-                     <div className="flex items-center gap-2 pt-2 border-t border-[#f0ebda]">
-                        <MapPin className="text-[#8B0000]" size={14} />
+                     {/* Location */}
+                     <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
+                        <MapPin className="text-[#a89f91]" size={16} />
                         <select value={input.selectedCityKey} onChange={(e) => setInput({...input, selectedCityKey: e.target.value})}
-                            className="flex-1 bg-transparent text-[#450a0a] text-xs outline-none py-1">
+                            className="flex-1 bg-transparent text-[#450a0a] text-sm outline-none">
                             {Object.keys(CITIES).map(city => <option key={city} value={city}>{city}</option>)}
                         </select>
                      </div>
                 </div>
             ) : (
-                <div className="space-y-3">
-                    <div className="grid grid-cols-4 gap-2">
+                <div className="space-y-6">
+                    {/* Manual Pillar Selection */}
+                    <div className="grid grid-cols-4 gap-4">
                          {['年','月','日','时'].map((t,i) => (
-                             <div key={i} className="text-center text-[#8c7b75] text-[10px]">{t}柱</div>
+                             <div key={i} className="text-center text-[#8c7b75] text-xs font-serif">{t}柱</div>
                          ))}
-                         <div className="col-span-4 grid grid-cols-4 gap-2">
+                         <div className="col-span-4 grid grid-cols-4 gap-4">
                              {[
                                  [pillars.yGan, pillars.yZhi, 'yGan', 'yZhi'],
                                  [pillars.mGan, pillars.mZhi, 'mGan', 'mZhi'],
                                  [pillars.dGan, pillars.dZhi, 'dGan', 'dZhi'],
                                  [pillars.hGan, pillars.hZhi, 'hGan', 'hZhi']
-                             ].map(([gVal, zVal, gKey, zKey]: any, idx) => (
-                                 <div key={idx} className="flex flex-col gap-1">
-                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none text-sm font-bold"
-                                        value={gVal} onChange={e => setPillars({...pillars, [gKey]: e.target.value})}>
-                                        {GAN.map(g => <option key={g} value={g}>{g}</option>)}
-                                     </select>
-                                     <select className="bg-[#fffcf5] border border-[#d6cda4] rounded text-[#450a0a] p-1 text-center appearance-none text-sm font-bold"
-                                        value={zVal} onChange={e => setPillars({...pillars, [zKey]: e.target.value})}>
-                                        {ZHI.map(z => <option key={z} value={z}>{z}</option>)}
-                                     </select>
+                             ].map(([gVal, zVal, gKey, zKey]: any, idx) => {
+                                 // Calculate colors for selected values
+                                 const gColor = gVal ? ELEMENT_COLORS[STEM_ELEMENTS[gVal]] : 'text-[#a89f91]';
+                                 const zColor = zVal ? ELEMENT_COLORS[BRANCH_ELEMENTS[zVal]] : 'text-[#a89f91]';
+                                 const filteredZhi = getFilteredZhi(gVal);
+
+                                 return (
+                                 <div key={idx} className="flex flex-col gap-3">
+                                     {/* Stem Select */}
+                                     <div className="relative border-b border-[#d6cda4]">
+                                         <select 
+                                            className={`w-full bg-transparent text-center appearance-none text-xl font-bold py-1 outline-none ${gColor}`}
+                                            value={gVal} 
+                                            onChange={e => {
+                                                // Reset branch when stem changes to ensure validity
+                                                setPillars({...pillars, [gKey]: e.target.value, [zKey]: ''});
+                                            }}
+                                         >
+                                            <option value="">-</option>
+                                            {GAN.map(g => (
+                                                <option key={g} value={g} className={ELEMENT_COLORS[STEM_ELEMENTS[g]]}>{g}</option>
+                                            ))}
+                                         </select>
+                                     </div>
+
+                                     {/* Branch Select */}
+                                     <div className="relative border-b border-[#d6cda4]">
+                                        <select 
+                                            className={`w-full bg-transparent text-center appearance-none text-xl font-bold py-1 outline-none ${zColor}`}
+                                            value={zVal} 
+                                            onChange={e => setPillars({...pillars, [zKey]: e.target.value})}
+                                            disabled={!gVal} // Disable branch if no stem selected
+                                         >
+                                            <option value="">-</option>
+                                            {filteredZhi.map(z => (
+                                                <option key={z} value={z} className={ELEMENT_COLORS[BRANCH_ELEMENTS[z]]}>{z}</option>
+                                            ))}
+                                         </select>
+                                     </div>
                                  </div>
-                             ))}
+                             )})}
                          </div>
                     </div>
-                    <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary" className="text-xs py-2">
+                    
+                    <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary" className="text-xs py-2 mt-4 bg-[#eaddcf]/50 border-none shadow-none text-[#5c4033] hover:text-[#8B0000]">
                         <Search size={14} className="mr-2" /> 查询匹配日期
                     </Button>
                     
@@ -436,12 +517,10 @@ function App() {
             )}
         </div>
 
-        <div className="relative mb-2 z-20">
-            <div className="bg-white/80 border border-[#d6cda4] rounded-lg overflow-hidden shadow-sm flex items-center">
-                <div className="bg-[#fffcf5] px-3 py-2 border-r border-[#ebe5ce] flex items-center gap-2 min-w-[70px]">
-                     <span className="w-1 h-3 bg-[#8B0000] rounded-full"></span>
-                     <span className="text-xs text-[#5c4033] font-bold">分组</span>
-                </div>
+        {/* Group Selection - Minimal */}
+        <div className="relative mb-2 px-2 z-20">
+            <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
+                <FolderInput className="text-[#a89f91]" size={16} />
                 <div className="flex-1 relative">
                      <input
                          type="text"
@@ -450,13 +529,14 @@ function App() {
                          onFocus={() => setShowGroupSuggestions(true)}
                          onBlur={() => setTimeout(() => setShowGroupSuggestions(false), 200)}
                          placeholder="输入或选择分组 (默认)"
-                         className="w-full h-full px-3 py-2 text-sm bg-transparent outline-none text-[#450a0a]"
+                         className="w-full bg-transparent outline-none text-[#450a0a] text-sm"
                      />
-                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#d6cda4] pointer-events-none" />
+                     <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-[#d6cda4] pointer-events-none" />
                 </div>
             </div>
+            {/* Suggestions */}
             {showGroupSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#fffcf5] border border-[#d6cda4] rounded-lg shadow-xl max-h-40 overflow-y-auto z-30">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#fffcf5] border border-[#d6cda4] rounded shadow-lg max-h-40 overflow-y-auto z-30">
                      {['默认分组', ...uniqueGroups].map(g => (
                          <button
                              key={g}
@@ -473,7 +553,7 @@ function App() {
         
         <div className="flex-1"></div>
 
-        <div className="flex gap-3 mt-4 pt-2 border-t border-[#d6cda4]/30">
+        <div className="flex gap-3 mt-6 pt-2">
             <Button onClick={handleArrange} className="flex-[4] py-4 text-lg shadow-lg">
                 立刻排盘
             </Button>
@@ -504,7 +584,7 @@ function App() {
            <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
               返回
            </button>
-           <h1 className="font-calligraphy text-2xl text-white tracking-widest drop-shadow-md">八字排盘宝</h1>
+           <h1 className="font-calligraphy text-2xl text-white tracking-widest drop-shadow-md">玄青君八字</h1>
            <button onClick={() => setHistoryOpen(true)} className="p-1.5 bg-[#b93b3b] rounded border border-[#cf5454] text-white shadow">
               <Menu size={20} />
            </button>
@@ -521,14 +601,14 @@ function App() {
 
             {/* Four Pillars Section - Compact & Centered */}
             <div className="mt-2 flex justify-center">
-                <div className="w-full max-w-sm flex">
+                <div className="w-full max-w-[340px] flex">
                     {/* Gender/Mode Label - Left Column - Aligned with Na Yin Row */}
-                    <div className="w-10 flex items-start text-[15px] font-bold text-[#1c1917]">
+                    <div className="w-14 flex items-start justify-end pr-1 text-[13px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
                         {currentRecord.gender}：
                     </div>
 
                     {/* Pillars Grid */}
-                    <div className="flex-1 grid grid-cols-4 gap-1 text-center relative">
+                    <div className="flex-1 grid grid-cols-4 gap-0 text-center relative">
                          {/* Na Yin Row */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ny-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.naYin}</div>
@@ -624,8 +704,8 @@ function App() {
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* Removed Life Stage Row */}
-                                 <div className="h-4 text-[11px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin.substring(0,3)}</div>
+                                 {/* Removed Life Stage Row, fixed Na Yin full text */}
+                                 <div className="h-4 text-[11px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                  <div className="h-4 text-[11px] text-[#333]">{yun.stemTenGod}</div>
                                  
                                  {/* Da Yun Pillar */}
