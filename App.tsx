@@ -212,6 +212,7 @@ function App() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
+      a.style.display = 'none'; // Ensure element is hidden but appended
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -481,8 +482,8 @@ function App() {
                          )}
                      </div>
                      
-                     {/* Early/Late Rat Checkbox - Available for BOTH modes */}
-                     <div className="flex justify-end pt-2">
+                     {/* Options Checkboxes */}
+                     <div className="flex flex-col items-end gap-2 pt-2">
                          <label className="flex items-center gap-2 cursor-pointer group select-none">
                             <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
                                 {input.processEarlyLateRat && <Check size={10} className="text-white" />}
@@ -492,6 +493,17 @@ function App() {
                                 onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
                             />
                             <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">区分早晚子时</span>
+                         </label>
+
+                         <label className="flex items-center gap-2 cursor-pointer group select-none">
+                            <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.autoSave ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                {input.autoSave && <Check size={10} className="text-white" />}
+                            </div>
+                            <input type="checkbox" className="hidden" 
+                                checked={input.autoSave} 
+                                onChange={(e) => setInput({...input, autoSave: e.target.checked})} 
+                            />
+                            <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">是否保存案例</span>
                          </label>
                      </div>
 
@@ -911,6 +923,7 @@ function App() {
                     <div className="space-y-3">
                         <label className="text-xs text-[#a89f91] font-bold uppercase tracking-wider block mb-2">数据管理</label>
                         <button 
+                            type="button"
                             onClick={handleBackup}
                             className="w-full flex items-center justify-between bg-white border border-[#d6cda4] p-3 rounded-lg text-[#450a0a] hover:border-[#8B0000] hover:bg-[#fff8ea] transition-all group"
                         >
@@ -922,6 +935,7 @@ function App() {
                         </button>
                         
                         <button 
+                            type="button"
                             onClick={handleRestoreClick}
                             className="w-full flex items-center justify-between bg-white border border-[#d6cda4] p-3 rounded-lg text-[#450a0a] hover:border-[#8B0000] hover:bg-[#fff8ea] transition-all group"
                         >
