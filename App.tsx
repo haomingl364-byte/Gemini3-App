@@ -284,13 +284,15 @@ function App() {
       if (input.calendarType === CalendarType.LUNAR) {
           return LUNAR_MONTHS.map((m, idx) => <option key={idx} value={idx + 1}>{m}</option>);
       }
-      return Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}月</option>);
+      // Fixed: Return just the number for Solar options, as the "Month" unit is displayed externally
+      return Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>);
   };
   const getDayOptions = () => {
       if (input.calendarType === CalendarType.LUNAR) {
           return LUNAR_DAYS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>);
       }
-      return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}日</option>);
+      // Fixed: Return just the number for Solar options
+      return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>);
   };
 
   const renderForm = () => {
@@ -361,34 +363,37 @@ function App() {
                      {/* Date Selectors */}
                      <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-2 text-center`}>
                          {/* Year */}
-                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
+                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                  {years.map(y => <option key={y} value={y}>{y}</option>)}
                              </select>
+                             <span className="text-xs text-[#5c4033] ml-0.5">年</span>
                          </div>
                          
                          {/* Month */}
-                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
+                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                  {getMonthOptions()}
                              </select>
+                             {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">月</span>}
                          </div>
 
                          {/* Day */}
-                         <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
+                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                  {getDayOptions()}
                              </select>
+                             {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">日</span>}
                          </div>
 
                          {/* Hour */}
                          {input.calendarType === CalendarType.LUNAR ? (
-                            <div className="flex flex-col gap-1 col-span-1 border-b border-[#d6cda4]">
+                            <div className="flex flex-row items-center justify-center col-span-1 border-b border-[#d6cda4] pb-1">
                                 <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                    className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                    className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                     {lunarTimeOptions.map((t) => (
                                         <option key={t.value} value={t.value}>{t.name.split(' ')[0]}</option>
                                     ))}
@@ -396,17 +401,19 @@ function App() {
                             </div>
                          ) : (
                             <>
-                                <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
+                                <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                                      <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                         className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                          {hours.map(h => <option key={h} value={h}>{h}</option>)}
                                      </select>
+                                     <span className="text-xs text-[#5c4033] ml-0.5">时</span>
                                 </div>
-                                <div className="flex flex-col gap-1 border-b border-[#d6cda4]">
+                                <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                                      <select value={input.minute} onChange={(e) => setInput({...input, minute:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-base p-1 text-center appearance-none outline-none">
+                                         className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
                                          {minutes.map(m => <option key={m} value={m}>{m}</option>)}
                                      </select>
+                                     <span className="text-xs text-[#5c4033] ml-0.5">分</span>
                                 </div>
                             </>
                          )}
@@ -673,7 +680,7 @@ function App() {
             {/* Da Yun Header - Unified text-[13px] */}
             <div className="mt-0.5 text-[13px]">
                 <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
-                <div className="text-[#333] text-[13px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#961c1c] font-bold">丙申</span></div>
+                <div className="text-[#333] text-[13px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">丙申</span></div>
             </div>
 
             {/* Da Yun & Liu Nian Matrix - Horizontal Mode */}
@@ -686,20 +693,38 @@ function App() {
                              <div className="h-4"></div>
                              <div className="h-4"></div>
                              {/* Reduced gap: removed spacer */}
-                             <div className="h-8 flex items-center justify-center font-bold text-[13px] text-[#1c1917]">运前</div>
-                             <div className="h-4 text-[13px] text-[#333]">1</div>
-                             <div className="h-4 text-[13px] text-[#333]">{chart.yunQian[0]?.year}</div>
-                             {/* Vertical Liu Nian list for Yun Qian */}
-                             <div className="mt-2 flex flex-col items-center gap-1">
-                                 {chart.yunQian.map((yn, idx) => {
-                                     const isCurrent = yn.year === currentYear;
-                                     return (
-                                         <div key={idx} className={`flex items-center justify-center h-[18px] ${isCurrent ? 'text-[#961c1c] font-bold' : 'text-[#333]'}`}>
-                                             <span className="text-[13px] tracking-widest">{yn.ganZhi}</span>
-                                         </div>
-                                     );
-                                 })}
-                             </div>
+                             {/* Check if current year is in Yun Qian list */}
+                             {(() => {
+                                 const isCurrentYunQian = chart.yunQian.some(y => y.year === currentYear);
+                                 const highlightColor = 'text-[#8B0000]'; // Darker Red
+                                 
+                                 return (
+                                     <>
+                                        {/* Header is RED if active, acting as pillar text */}
+                                        <div className={`h-8 flex items-center justify-center font-bold text-[15px] ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
+                                        {/* Age and Year are ALWAYS black */}
+                                        <div className="h-4 text-[15px] text-[#333]">1</div>
+                                        <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
+                                        
+                                        {/* Vertical Liu Nian list for Yun Qian */}
+                                        <div className="mt-2 flex flex-col items-center gap-1">
+                                            {chart.yunQian.map((yn, idx) => {
+                                                const isCurrent = yn.year === currentYear;
+                                                // If current column (YunQian), all years are red. Specific year is bold red.
+                                                const textColor = isCurrentYunQian 
+                                                    ? (isCurrent ? `${highlightColor} font-bold` : highlightColor) 
+                                                    : 'text-[#333]';
+                                                
+                                                return (
+                                                    <div key={idx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
+                                                        <span className="text-[15px] tracking-widest">{yn.ganZhi}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                     </>
+                                 );
+                             })()}
                          </div>
 
                          {/* Da Yun Columns */}
@@ -707,34 +732,34 @@ function App() {
                              // Highlight Logic
                              const nextYun = chart.daYun[idx + 1];
                              const isCurrentDaYun = currentYear >= yun.startYear && (!nextYun || currentYear < nextYun.startYear);
-                             const columnColor = isCurrentDaYun ? 'text-[#961c1c]' : 'text-[#333]';
+                             const highlightColor = 'text-[#8B0000]'; // Dark Red
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* Unified text-[13px] */}
-                                 <div className="h-4 text-[13px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
-                                 <div className="h-4 text-[13px] text-[#333]">{yun.stemTenGod}</div>
+                                 {/* NaYin/TenGod are always black (neutral) */}
+                                 <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
+                                 <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
                                  
-                                 {/* Da Yun Pillar - Extra Enlarged (text-[16px]) and Red if current */}
-                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? 'text-[#961c1c]' : 'text-[#1c1917]'} font-bold`}>
+                                 {/* Da Yun Pillar - Red if current */}
+                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? highlightColor : 'text-[#1c1917]'} font-bold`}>
                                      <span className="text-[16px] tracking-wide">{yun.ganZhi}</span> 
                                  </div>
                                  
-                                 {/* Age & Year */}
-                                 <div className="h-4 text-[13px] text-[#333]">{yun.startAge}</div>
-                                 <div className="h-4 text-[13px] text-[#333]">{yun.startYear}</div>
+                                 {/* Age & Year - ALWAYS Black */}
+                                 <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
+                                 <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
                                  {/* Liu Nian Vertical List */}
                                  <div className="mt-2 flex flex-col items-center gap-1">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          // Highlight entire list red if current Da Yun
-                                         const baseColor = isCurrentDaYun ? 'text-[#961c1c]' : 'text-[#333]';
-                                         const textColor = isCurrentLiuNian ? 'text-[#961c1c] font-bold' : baseColor;
+                                         const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
+                                         const textColor = isCurrentLiuNian ? `${highlightColor} font-bold` : baseColor;
                                          
                                          return (
                                             <div key={lnIdx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
-                                                <span className="text-[13px] tracking-widest">{ln.ganZhi}</span>
+                                                <span className="text-[15px] tracking-widest">{ln.ganZhi}</span>
                                             </div>
                                          );
                                      })}
@@ -749,8 +774,8 @@ function App() {
             <div className="mt-8 mb-6 px-2">
                 <div className="bg-white/60 border border-[#d6cda4] rounded-lg p-3 shadow-sm">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-[#e5e0d0]">
-                        <h3 className="font-bold text-[#8B0000] text-[13px] flex items-center gap-2">
-                            <Edit3 size={14}/> 命理师批注
+                        <h3 className="font-bold text-[#8B0000] text-[17px] flex items-center gap-2">
+                            <Edit3 size={18}/> 命理师批注
                         </h3>
                         <div className="flex gap-2">
                             <button 
@@ -769,7 +794,7 @@ function App() {
                         </div>
                     </div>
                     <textarea
-                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-[13px] leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
+                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-[17px] leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
                         placeholder="在此输入命理分析..."
                         value={noteDraft}
                         onChange={(e) => setNoteDraft(e.target.value)}
