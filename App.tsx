@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3, Download, Upload, FileText } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
@@ -58,11 +58,15 @@ function App() {
 
   const [currentRecord, setCurrentRecord] = useState<Record | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [records, setRecords] = useState<Record[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
+
+  // File Input Ref for Import
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const years = Array.from({length: 150}, (_, i) => 1900 + i);
   const hours = Array.from({length: 24}, (_, i) => i);
@@ -194,6 +198,64 @@ function App() {
     }
   };
 
+  // --- Backup & Restore Logic ---
+
+  const handleBackup = () => {
+      if (records.length === 0) {
+          alert("暂无记录可备份");
+          return;
+      }
+      const dataStr = JSON.stringify(records, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+          try {
+              const json = event.target?.result as string;
+              const parsed = JSON.parse(json);
+              
+              if (Array.isArray(parsed)) {
+                  // Merge Logic
+                  const existingIds = new Set(records.map(r => r.id));
+                  const newUniqueRecords = parsed.filter((r: Record) => !existingIds.has(r.id));
+                  const combinedRecords = [...newUniqueRecords, ...records];
+                  combinedRecords.sort((a, b) => b.createdAt - a.createdAt);
+                  
+                  saveRecordsToStorage(combinedRecords);
+                  alert(`成功恢复/导入 ${newUniqueRecords.length} 条新记录！`);
+                  setShowSettings(false);
+              } else {
+                  alert("文件格式不正确：内容必须是记录列表");
+              }
+          } catch (err) {
+              console.error(err);
+              alert("导入失败：文件损坏或格式错误");
+          }
+          // Reset value
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsText(file);
+  };
+
+
   const handleSearchDates = () => {
       // Validate all fields selected
       const p = pillars;
@@ -303,7 +365,7 @@ function App() {
     return (
     // Added safe-area padding to top
     <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] pb-6 font-sans bg-[#fff8ea]">
-      <div className="text-center mb-4 pt-4">
+      <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
       </div>
@@ -564,16 +626,29 @@ function App() {
         
         <div className="flex-1"></div>
 
-        <div className="flex gap-3 mt-6 pt-2 pb-12">
-            {/* Reduced height buttons: changed py-4 to py-2.5 */}
-            <Button onClick={handleArrange} className="flex-[4] py-2.5 text-lg shadow-lg">
+        <div className="flex items-center gap-2 mt-6 pt-2 pb-12 px-1">
+            {/* Settings/Data Button - 10% (flex-1) */}
+            <div className="flex-[1] flex justify-center">
+                <button
+                    type="button"
+                    onClick={() => setShowSettings(true)}
+                    className="p-1.5 text-[#a89f91] hover:text-[#8B0000] hover:bg-[#eaddcf]/30 rounded-full transition-colors"
+                >
+                   <Settings size={20} />
+                </button>
+            </div>
+
+            {/* Main Arrange Button - 70% (flex-7) */}
+            <Button onClick={handleArrange} className="flex-[7] h-9 p-0 text-base shadow-lg">
                 立刻排盘
             </Button>
+            
+            {/* History Button - 20% (flex-2) */}
             <Button
                 type="button"
                 variant="secondary"
                 onClick={() => setHistoryOpen(true)}
-                className="flex-[1] py-2.5 text-sm shadow-md border-[#d6cda4]"
+                className="flex-[2] h-9 p-0 text-xs shadow-md border-[#d6cda4]"
             >
                 命例
             </Button>
@@ -815,7 +890,69 @@ function App() {
         records={records}
         onSelect={loadRecord}
         onDelete={deleteRecord}
+        onImport={handleRestoreClick}
+        onBackup={handleBackup}
       />
+      
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn">
+            <div className="bg-[#fffcf5] rounded-xl w-full max-w-xs border border-[#d6cda4] shadow-2xl relative overflow-hidden">
+                <div className="bg-[#fff8ea] p-4 border-b border-[#e5e0d0] flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-[#8B0000] flex items-center gap-2">
+                        <Settings size={18} /> 设置与数据
+                    </h3>
+                    <button onClick={() => setShowSettings(false)} className="text-[#a89f91] hover:text-[#5c4033]">
+                        <X size={20}/>
+                    </button>
+                </div>
+                
+                <div className="p-5 space-y-4">
+                    <div className="space-y-3">
+                        <label className="text-xs text-[#a89f91] font-bold uppercase tracking-wider block mb-2">数据管理</label>
+                        <button 
+                            onClick={handleBackup}
+                            className="w-full flex items-center justify-between bg-white border border-[#d6cda4] p-3 rounded-lg text-[#450a0a] hover:border-[#8B0000] hover:bg-[#fff8ea] transition-all group"
+                        >
+                            <span className="flex items-center gap-3 font-bold text-sm">
+                                <span className="bg-[#eaddcf] p-1.5 rounded text-[#5c4033] group-hover:text-[#8B0000] transition-colors"><Download size={16}/></span>
+                                备份所有数据
+                            </span>
+                            <ChevronRight size={16} className="text-[#d6cda4] group-hover:text-[#8B0000]"/>
+                        </button>
+                        
+                        <button 
+                            onClick={handleRestoreClick}
+                            className="w-full flex items-center justify-between bg-white border border-[#d6cda4] p-3 rounded-lg text-[#450a0a] hover:border-[#8B0000] hover:bg-[#fff8ea] transition-all group"
+                        >
+                             <span className="flex items-center gap-3 font-bold text-sm">
+                                <span className="bg-[#eaddcf] p-1.5 rounded text-[#5c4033] group-hover:text-[#8B0000] transition-colors"><Upload size={16}/></span>
+                                恢复数据 (导入)
+                            </span>
+                            <ChevronRight size={16} className="text-[#d6cda4] group-hover:text-[#8B0000]"/>
+                        </button>
+                    </div>
+
+                    <div className="bg-[#fdfbf6] p-3 rounded border border-[#f0ebda] text-[11px] text-[#8c7b75] leading-relaxed">
+                        <p className="flex items-start gap-1">
+                            <FileText size={12} className="mt-0.5 shrink-0"/>
+                            更新 App 前，请先点击“备份”将数据保存到手机“文件”中。更新完成后，点击“恢复”选择该文件即可找回记录。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Hidden File Input used by both Settings Modal and History Drawer */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        className="hidden" 
+        accept=".json,application/json"
+      />
+
       {view === 'form' ? renderForm() : renderChart()}
     </>
   );

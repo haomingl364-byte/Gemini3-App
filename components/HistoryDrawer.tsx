@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { Record } from '../types';
-import { X, Clock, Trash2, Search, Folder, ChevronRight, User } from 'lucide-react';
+import { X, Clock, Trash2, Search, Folder, ChevronRight, Download, Upload } from 'lucide-react';
 
 interface HistoryDrawerProps {
   isOpen: boolean;
@@ -9,9 +8,11 @@ interface HistoryDrawerProps {
   records: Record[];
   onSelect: (record: Record) => void;
   onDelete: (id: string) => void;
+  onImport: () => void; // Trigger file input
+  onBackup: () => void; // Trigger export
 }
 
-export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, records, onSelect, onDelete }) => {
+export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, records, onSelect, onDelete, onImport, onBackup }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('全部');
 
@@ -150,8 +151,24 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
           )}
         </div>
         
-        {/* Footer Stats */}
-        <div className="p-2 border-t border-[#d6cda4] bg-[#fffcf5] text-center text-[10px] text-[#a89f91]">
+        {/* Footer Actions (Backup/Restore) */}
+        <div className="p-3 border-t border-[#d6cda4] bg-[#fffcf5] flex gap-2">
+            <button 
+                onClick={onBackup}
+                className="flex-1 flex items-center justify-center gap-1 bg-[#eaddcf] text-[#5c4033] py-2 rounded text-xs font-bold hover:bg-[#d6cda4] transition-colors"
+            >
+                <Download size={14} /> 备份数据
+            </button>
+            <button 
+                onClick={onImport}
+                className="flex-1 flex items-center justify-center gap-1 bg-[#8B0000] text-white py-2 rounded text-xs font-bold hover:bg-[#7a0000] transition-colors"
+            >
+                <Upload size={14} /> 恢复数据
+            </button>
+        </div>
+
+        {/* Stats */}
+        <div className="pb-4 pt-1 text-center text-[10px] text-[#a89f91] bg-[#fffcf5]">
             共 {records.length} 条档案
         </div>
       </div>
