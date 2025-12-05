@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3 } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
@@ -9,15 +8,18 @@ import { Button } from './components/Button';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { PillarDisplay } from './components/PillarDisplay';
 
+// Initialize with current date/time
+const now = new Date();
+
 const initialInput: UserInput = {
   name: '',
   gender: Gender.MALE,
   calendarType: CalendarType.SOLAR,
-  year: 1990,
-  month: 1,
-  day: 1,
-  hour: 12,
-  minute: 0,
+  year: now.getFullYear(),
+  month: now.getMonth() + 1,
+  day: now.getDate(),
+  hour: now.getHours(),
+  minute: now.getMinutes(),
   isLeapMonth: false,
   selectedCityKey: '不参考出生地 (北京时间)',
   autoSave: true,
@@ -297,8 +299,9 @@ function App() {
         .sort();
     
     return (
-    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-4 pb-6 font-sans bg-[#fff8ea]">
-      <div className="text-center mb-4">
+    // Added safe-area padding to top
+    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] pb-6 font-sans bg-[#fff8ea]">
+      <div className="text-center mb-4 pt-4">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
       </div>
@@ -554,15 +557,16 @@ function App() {
         
         <div className="flex-1"></div>
 
-        <div className="flex gap-3 mt-6 pt-2">
-            <Button onClick={handleArrange} className="flex-[4] py-4 text-lg shadow-lg">
+        <div className="flex gap-3 mt-6 pt-2 pb-12">
+            {/* Reduced height buttons: changed py-4 to py-2.5 */}
+            <Button onClick={handleArrange} className="flex-[4] py-2.5 text-lg shadow-lg">
                 立刻排盘
             </Button>
             <Button
                 type="button"
                 variant="secondary"
                 onClick={() => setHistoryOpen(true)}
-                className="flex-[1] py-4 text-sm shadow-md border-[#d6cda4]"
+                className="flex-[1] py-2.5 text-sm shadow-md border-[#d6cda4]"
             >
                 命例
             </Button>
@@ -580,8 +584,8 @@ function App() {
 
     return (
       <div className="flex flex-col min-h-screen bg-[#fffbe6] pb-20 font-sans text-[#1c1917] select-none">
-        {/* Custom Header matching the image */}
-        <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-12 px-2 shadow-md">
+        {/* Custom Header matching the image - Added Safe Area Padding */}
+        <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-auto min-h-[48px] pt-[max(0.5rem,env(safe-area-inset-top))] pb-1 px-2 shadow-md">
            <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
               返回
            </button>
@@ -593,8 +597,8 @@ function App() {
 
         <div className="flex-1 overflow-y-auto p-2">
             
-            {/* Top Text Info Section */}
-            <div className="space-y-1 text-[13px] leading-tight text-[#333]">
+            {/* Top Text Info Section - Unified text-[11px] */}
+            <div className="space-y-1 text-[11px] leading-tight text-[#333]">
                 <div>出生时间：{chart.solarDateStr}</div>
                 <div>出生时间：{chart.lunarDateStr}</div>
                 <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
@@ -603,38 +607,38 @@ function App() {
             {/* Four Pillars Section - Left Aligned Layout */}
             <div className="mt-2 pl-2">
                 <div className="flex gap-2">
-                    {/* Gender/Mode Label - Left Column - Aligned with Na Yin Row */}
-                    <div className="w-10 flex items-start justify-start text-[13px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
+                    {/* Gender/Mode Label - Unified text-[11px] */}
+                    <div className="w-10 flex items-start justify-start text-[11px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
                         {currentRecord.gender}：
                     </div>
 
                     {/* Pillars Grid */}
                     <div className="grid grid-cols-4 gap-0 text-center relative w-[280px]">
-                         {/* Na Yin Row */}
+                         {/* Na Yin Row - Unified text-[11px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ny-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.naYin}</div>
                          ))}
                          
-                         {/* Ten God Row */}
+                         {/* Ten God Row - Unified text-[11px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`tg-${i}`} className="text-[11px] text-[#4a4a4a] h-5">{p.stemTenGod}</div>
                          ))}
                          
-                         {/* Stem Row */}
+                         {/* Stem Row - Main 8 Characters keep large size */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`s-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.stemElement]}`}>
                                  {p.stem}
                              </div>
                          ))}
                          
-                         {/* Branch Row */}
+                         {/* Branch Row - Main 8 Characters keep large size */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]}`}>
                                  {p.branch}
                              </div>
                          ))}
                          
-                         {/* Hidden Stems List */}
+                         {/* Hidden Stems List - Unified text-[11px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`hs-${i}`} className="flex flex-col items-center mt-1 space-y-0.5">
                                  {p.hiddenStems.map((hs, idx) => (
@@ -646,51 +650,52 @@ function App() {
                              </div>
                          ))}
                          
-                         {/* Life Stage */}
+                         {/* Life Stage - Unified text-[11px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`ls-${i}`} className="mt-2 text-[12px] text-[#333]">{p.lifeStage}</div>
+                             <div key={`ls-${i}`} className="mt-2 text-[11px] text-[#333]">{p.lifeStage}</div>
                          ))}
 
-                         {/* Kong Wang Overlay (Right of Day/Hour) */}
-                         <div className="absolute right-0 top-16 text-[11px] text-red-600 transform translate-x-8">
+                         {/* Kong Wang Overlay - Unified text-[11px] */}
+                         <div className="absolute right-0 top-16 text-[11px] text-red-600 transform translate-x-14">
                              [{chart.dayKongWang}空]
                          </div>
                     </div>
                 </div>
             </div>
 
-            {/* Middle Info Block - Minimal, removed ShenSha */}
-            <div className="mt-1 space-y-1 text-[12px] leading-snug">
+            {/* Middle Info Block - Unified text-[11px], reduced gap */}
+            <div className="mt-0.5 space-y-0.5 text-[11px] leading-snug">
                 <div className="flex gap-2">
                     <span className="text-green-700">司令: {chart.renYuanSiLing} [设置]</span>
                 </div>
             </div>
 
-            {/* Da Yun Header */}
-            <div className="mt-1 text-[13px]">
+            {/* Da Yun Header - Unified text-[11px] */}
+            <div className="mt-0.5 text-[11px]">
                 <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
-                <div className="text-[#333] text-[12px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#961c1c] font-bold">丙申</span></div>
+                <div className="text-[#333] text-[11px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#961c1c] font-bold">丙申</span></div>
             </div>
 
             {/* Da Yun & Liu Nian Matrix - Horizontal Mode */}
-            <div className="mt-2 overflow-x-auto">
+            {/* Added touch-action: pan-x to allow horizontal scroll without triggering page navigation */}
+            <div className="mt-1 overflow-x-auto touch-pan-x">
                 <div className="min-w-max">
                      <div className="flex">
                          {/* Header Column (Yun Qian) */}
                          <div className="flex flex-col w-12 items-center shrink-0">
                              <div className="h-4"></div>
                              <div className="h-4"></div>
-                             {/* Removed one spacer here to fix alignment */}
-                             <div className="h-8 flex items-center justify-center font-bold text-base text-[#1c1917]">运前</div>
+                             {/* Reduced gap: removed spacer */}
+                             <div className="h-8 flex items-center justify-center font-bold text-[11px] text-[#1c1917]">运前</div>
                              <div className="h-4 text-[11px] text-[#333]">1</div>
                              <div className="h-4 text-[11px] text-[#333]">{chart.yunQian[0]?.year}</div>
-                             {/* Vertical Liu Nian list for Yun Qian (Horizontal Text) */}
+                             {/* Vertical Liu Nian list for Yun Qian */}
                              <div className="mt-2 flex flex-col items-center gap-1">
                                  {chart.yunQian.map((yn, idx) => {
                                      const isCurrent = yn.year === currentYear;
                                      return (
                                          <div key={idx} className={`flex items-center justify-center h-[18px] ${isCurrent ? 'text-[#961c1c] font-bold' : 'text-[#333]'}`}>
-                                             <span className="text-[13px] tracking-widest">{yn.ganZhi}</span>
+                                             <span className="text-[11px] tracking-widest">{yn.ganZhi}</span>
                                          </div>
                                      );
                                  })}
@@ -705,13 +710,17 @@ function App() {
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* Removed Life Stage Row, fixed Na Yin full text */}
+                                 {/* Unified text-[11px] */}
                                  <div className="h-4 text-[11px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                  <div className="h-4 text-[11px] text-[#333]">{yun.stemTenGod}</div>
                                  
-                                 {/* Da Yun Pillar */}
+                                 {/* Da Yun Pillar - Keep large? User said "all words one size EXCEPT 8 chars". 
+                                     Usually Da Yun is prominent. I'll make it slightly larger than 11px but smaller than main, 
+                                     or stick to 11px per strict instruction? 
+                                     Instruction: "Besides Four Pillars 8 chars, ALL other words use one font size". 
+                                     I will set Da Yun to text-[11px] as requested, but bold. */}
                                  <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? 'text-[#961c1c]' : 'text-[#1c1917]'} font-bold`}>
-                                     <span className="text-lg tracking-wide">{yun.ganZhi}</span>
+                                     <span className="text-[11px] tracking-wide">{yun.ganZhi}</span> 
                                  </div>
                                  
                                  {/* Age & Year */}
@@ -726,7 +735,7 @@ function App() {
                                          
                                          return (
                                             <div key={lnIdx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
-                                                <span className="text-[13px] tracking-widest">{ln.ganZhi}</span>
+                                                <span className="text-[11px] tracking-widest">{ln.ganZhi}</span>
                                             </div>
                                          );
                                      })}
@@ -741,7 +750,7 @@ function App() {
             <div className="mt-8 mb-6 px-2">
                 <div className="bg-white/60 border border-[#d6cda4] rounded-lg p-3 shadow-sm">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-[#e5e0d0]">
-                        <h3 className="font-bold text-[#8B0000] text-sm flex items-center gap-2">
+                        <h3 className="font-bold text-[#8B0000] text-[11px] flex items-center gap-2">
                             <Edit3 size={14}/> 命理师批注
                         </h3>
                         <div className="flex gap-2">
@@ -761,7 +770,7 @@ function App() {
                         </div>
                     </div>
                     <textarea
-                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-sm leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
+                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-[11px] leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
                         placeholder="在此输入命理分析..."
                         value={noteDraft}
                         onChange={(e) => setNoteDraft(e.target.value)}
