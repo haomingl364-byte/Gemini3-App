@@ -200,23 +200,37 @@ function App() {
 
   // --- Backup & Restore Logic ---
 
-  const handleBackup = () => {
+  const handleBackup = (e: React.MouseEvent) => {
+      e.preventDefault(); // Prevent any default button behavior
+      e.stopPropagation();
+
       if (records.length === 0) {
           alert("暂无记录可备份");
           return;
       }
-      const dataStr = JSON.stringify(records, null, 2);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
       
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
-      a.style.display = 'none'; // Ensure element is hidden but appended
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      try {
+          const dataStr = JSON.stringify(records, null, 2);
+          const blob = new Blob([dataStr], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          
+          // Use setTimeout to allow the DOM update to settle
+          setTimeout(() => {
+              a.click();
+              document.body.removeChild(a);
+              // Revoke URL after a delay to ensure download starts
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }, 0);
+      } catch (err) {
+          console.error("Backup failed", err);
+          alert("备份失败，请重试");
+      }
   };
 
   const handleRestoreClick = () => {
@@ -676,6 +690,24 @@ function App() {
     const { chart } = currentRecord;
     const currentYear = new Date().getFullYear();
 
+    // Determine current Da Yun
+    let currentDaYunStr = "运前";
+    if (chart.daYun.length > 0) {
+        if (currentYear < chart.daYun[0].startYear) {
+            currentDaYunStr = "运前";
+        } else {
+            const activeYun = chart.daYun.find((yun, idx) => {
+                const nextYun = chart.daYun[idx + 1];
+                return currentYear >= yun.startYear && (!nextYun || currentYear < nextYun.startYear);
+            });
+            if (activeYun) {
+                currentDaYunStr = activeYun.ganZhi;
+            } else {
+                currentDaYunStr = chart.daYun[chart.daYun.length - 1].ganZhi; // Post last luck
+            }
+        }
+    }
+
     return (
       <div className="flex flex-col min-h-screen bg-[#fffbe6] pb-20 font-sans text-[#1c1917] select-none">
         {/* Custom Header matching the image - Added Safe Area Padding */}
@@ -691,8 +723,8 @@ function App() {
 
         <div className="flex-1 overflow-y-auto p-2">
             
-            {/* Top Text Info Section - Unified text-[13px] */}
-            <div className="space-y-1 text-[13px] leading-tight text-[#333]">
+            {/* Top Text Info Section - INCREASED to text-[15px] */}
+            <div className="space-y-1 text-[15px] leading-tight text-[#333]">
                 <div>出生时间：{chart.solarDateStr}</div>
                 <div>出生时间：{chart.lunarDateStr}</div>
                 <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
@@ -701,42 +733,42 @@ function App() {
             {/* Four Pillars Section - Left Aligned Layout */}
             <div className="mt-2 pl-2">
                 <div className="flex gap-2">
-                    {/* Gender/Mode Label - Unified text-[13px] */}
-                    <div className="w-10 flex items-start justify-start text-[13px] font-bold text-[#1c1917] mt-0.5 whitespace-nowrap">
+                    {/* Gender/Mode Label - INCREASED to text-[15px] */}
+                    <div className="w-10 flex items-start justify-start text-[15px] font-bold text-[#1c1917] mt-1 whitespace-nowrap">
                         {currentRecord.gender}：
                     </div>
 
                     {/* Pillars Grid */}
-                    <div className="grid grid-cols-4 gap-0 text-center relative w-[280px]">
-                         {/* Na Yin Row - Unified text-[13px] */}
+                    <div className="grid grid-cols-4 gap-0 text-center relative w-[300px]">
+                         {/* Na Yin Row - INCREASED to text-[15px], adjusted height h-6 */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`ny-${i}`} className="text-[13px] text-[#4a4a4a] h-5">{p.naYin}</div>
+                             <div key={`ny-${i}`} className="text-[15px] text-[#4a4a4a] h-6">{p.naYin}</div>
                          ))}
                          
-                         {/* Ten God Row - Unified text-[13px] */}
+                         {/* Ten God Row - INCREASED to text-[15px], adjusted height h-6 */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`tg-${i}`} className="text-[13px] text-[#4a4a4a] h-5">{p.stemTenGod}</div>
+                             <div key={`tg-${i}`} className="text-[15px] text-[#4a4a4a] h-6">{p.stemTenGod}</div>
                          ))}
                          
-                         {/* Stem Row - Main 8 Characters keep large size */}
+                         {/* Stem Row - Main 8 Characters KEEP LARGE (text-2xl) */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`s-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.stemElement]}`}>
                                  {p.stem}
                              </div>
                          ))}
                          
-                         {/* Branch Row - Main 8 Characters keep large size */}
+                         {/* Branch Row - Main 8 Characters KEEP LARGE (text-2xl) */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]}`}>
                                  {p.branch}
                              </div>
                          ))}
                          
-                         {/* Hidden Stems List - Unified text-[13px] */}
+                         {/* Hidden Stems List - INCREASED to text-[15px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`hs-${i}`} className="flex flex-col items-center mt-1 space-y-0.5">
                                  {p.hiddenStems.map((hs, idx) => (
-                                     <div key={idx} className="flex gap-0.5 items-center text-[13px] leading-none">
+                                     <div key={idx} className="flex gap-0.5 items-center text-[15px] leading-none">
                                          <span className={`${ELEMENT_COLORS[hs.element]}`}>{hs.stem}</span>
                                          <span className="text-[#666] scale-90 origin-left">{hs.tenGod}</span>
                                      </div>
@@ -744,30 +776,30 @@ function App() {
                              </div>
                          ))}
                          
-                         {/* Life Stage - Unified text-[13px] */}
+                         {/* Life Stage - INCREASED to text-[15px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`ls-${i}`} className="mt-2 text-[13px] text-[#333]">{p.lifeStage}</div>
+                             <div key={`ls-${i}`} className="mt-2 text-[15px] text-[#333]">{p.lifeStage}</div>
                          ))}
 
-                         {/* Kong Wang Overlay - Unified text-[13px] - Move Left (translate-x-10) */}
-                         <div className="absolute right-0 top-16 text-[13px] text-red-600 transform translate-x-10">
+                         {/* Kong Wang Overlay - INCREASED to text-[15px] */}
+                         <div className="absolute right-0 top-16 text-[15px] text-red-600 transform translate-x-12">
                              [{chart.dayKongWang}空]
                          </div>
                     </div>
                 </div>
             </div>
 
-            {/* Middle Info Block - Unified text-[13px], reduced gap */}
-            <div className="mt-0.5 space-y-0.5 text-[13px] leading-snug">
+            {/* Middle Info Block - INCREASED to text-[15px] */}
+            <div className="mt-1 space-y-0.5 text-[15px] leading-snug">
                 <div className="flex gap-2">
                     <span className="text-green-700">司令: {chart.renYuanSiLing} [设置]</span>
                 </div>
             </div>
 
-            {/* Da Yun Header - Unified text-[13px] */}
-            <div className="mt-0.5 text-[13px]">
+            {/* Da Yun Header - INCREASED to text-[15px] */}
+            <div className="mt-1 text-[15px]">
                 <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
-                <div className="text-[#333] text-[13px]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">丙申</span></div>
+                <div className="text-[#333]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">{currentDaYunStr}</span></div>
             </div>
 
             {/* Da Yun & Liu Nian Matrix - Horizontal Mode */}
@@ -779,7 +811,6 @@ function App() {
                          <div className="flex flex-col w-12 items-center shrink-0">
                              <div className="h-4"></div>
                              <div className="h-4"></div>
-                             {/* Reduced gap: removed spacer */}
                              {/* Check if current year is in Yun Qian list */}
                              {(() => {
                                  const isCurrentYunQian = chart.yunQian.some(y => y.year === currentYear);
@@ -787,13 +818,13 @@ function App() {
                                  
                                  return (
                                      <>
-                                        {/* Header is RED if active, acting as pillar text */}
-                                        <div className={`h-8 flex items-center justify-center font-bold text-[15px] ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
-                                        {/* Age and Year are ALWAYS black */}
+                                        {/* Header is RED if active, acting as pillar text - INCREASED to text-lg (approx 18px) */}
+                                        <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
+                                        {/* Age and Year - Keep text-[15px] */}
                                         <div className="h-4 text-[15px] text-[#333]">1</div>
                                         <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         
-                                        {/* Vertical Liu Nian list for Yun Qian */}
+                                        {/* Vertical Liu Nian list for Yun Qian - Keep text-[15px] */}
                                         <div className="mt-2 flex flex-col items-center gap-1">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
@@ -823,20 +854,20 @@ function App() {
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* NaYin/TenGod are always black (neutral) */}
+                                 {/* NaYin/TenGod - Keep text-[15px] (User said except Da Yun details, but these are small headers. Keeping 15px is safe) */}
                                  <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
                                  
-                                 {/* Da Yun Pillar - Red if current */}
+                                 {/* Da Yun Pillar - Red if current - INCREASED to text-lg (approx 18px) */}
                                  <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? highlightColor : 'text-[#1c1917]'} font-bold`}>
-                                     <span className="text-[16px] tracking-wide">{yun.ganZhi}</span> 
+                                     <span className="text-lg tracking-wide">{yun.ganZhi}</span> 
                                  </div>
                                  
-                                 {/* Age & Year - ALWAYS Black */}
+                                 {/* Age & Year - Keep text-[15px] */}
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
-                                 {/* Liu Nian Vertical List */}
+                                 {/* Liu Nian Vertical List - Keep text-[15px] */}
                                  <div className="mt-2 flex flex-col items-center gap-1">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
