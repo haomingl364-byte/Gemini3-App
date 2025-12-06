@@ -64,6 +64,9 @@ function App() {
   const [noteDraft, setNoteDraft] = useState('');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
+  
+  // New state for save success animation
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   // File Input Ref for Import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,10 +111,11 @@ function App() {
     
     // Auto name generation logic
     let finalName = input.name.trim();
+    let isAutoNamed = false;
+
     if (!finalName) {
         finalName = generateNextCaseName(records);
-        // Update input state solely for UI consistency, though not strictly required if we use finalName
-        setInput(prev => ({ ...prev, name: finalName }));
+        isAutoNamed = true;
     }
 
     const chart = calculateBaZi({ ...input, name: finalName });
@@ -135,6 +139,16 @@ function App() {
         const newRecs = [newRecord, ...records];
         saveRecordsToStorage(newRecs);
     }
+
+    // If auto-named, clear the input so the next time the user comes back,
+    // it's empty and generates the NEXT number (instead of keeping "Case 1" in the field)
+    if (isAutoNamed) {
+        setInput(prev => ({ ...prev, name: '' }));
+    } else {
+        // If manually named, keep it (optional, but good for tweaking)
+        setInput(prev => ({ ...prev, name: finalName }));
+    }
+
     setView('chart');
   };
 
@@ -150,7 +164,10 @@ function App() {
     }
     saveRecordsToStorage(newRecords);
     setCurrentRecord(updatedRecord);
-    setShowNotesModal(false);
+    
+    // Show success animation
+    setShowSaveSuccess(true);
+    setTimeout(() => setShowSaveSuccess(false), 2000);
   };
 
   const handleAIAnalyze = async () => {
@@ -201,7 +218,7 @@ function App() {
   // --- Backup & Restore Logic ---
 
   const handleBackup = (e: React.MouseEvent) => {
-      e.preventDefault(); // Prevent any default button behavior
+      e.preventDefault(); // Prevent default
       e.stopPropagation();
 
       if (records.length === 0) {
@@ -217,16 +234,10 @@ function App() {
           const a = document.createElement("a");
           a.href = url;
           a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
-          a.style.display = 'none';
           document.body.appendChild(a);
-          
-          // Use setTimeout to allow the DOM update to settle
-          setTimeout(() => {
-              a.click();
-              document.body.removeChild(a);
-              // Revoke URL after a delay to ensure download starts
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-          }, 0);
+          a.click(); // Synchronous click
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
       } catch (err) {
           console.error("Backup failed", err);
           alert("备份失败，请重试");
@@ -710,6 +721,14 @@ function App() {
 
     return (
       <div className="flex flex-col min-h-screen bg-[#fffbe6] pb-20 font-sans text-[#1c1917] select-none">
+        {/* Save Success Toast */}
+        {showSaveSuccess && (
+            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-6 py-3 rounded-lg z-[80] flex items-center gap-2 shadow-2xl animate-fadeIn">
+                <Check size={20} className="text-green-400" />
+                <span className="font-bold">保存成功</span>
+            </div>
+        )}
+
         {/* Custom Header matching the image - Added Safe Area Padding */}
         <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-auto min-h-[48px] pt-[max(0.5rem,env(safe-area-inset-top))] pb-1 px-2 shadow-md">
            <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
@@ -781,8 +800,8 @@ function App() {
                              <div key={`ls-${i}`} className="mt-2 text-[15px] text-[#333]">{p.lifeStage}</div>
                          ))}
 
-                         {/* Kong Wang Overlay - INCREASED to text-[15px] */}
-                         <div className="absolute right-0 top-16 text-[15px] text-red-600 transform translate-x-12">
+                         {/* Kong Wang Overlay - INCREASED to text-[15px] - CHANGED from translate-x-12 to translate-x-2 (Moved Left) */}
+                         <div className="absolute right-0 top-16 text-[15px] text-red-600 transform translate-x-2">
                              [{chart.dayKongWang}空]
                          </div>
                     </div>
