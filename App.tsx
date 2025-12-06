@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3, Download, Upload, FileText } from 'lucide-react';
+import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3, Download, Upload, FileText, Copy } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
@@ -65,8 +65,8 @@ function App() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
   
-  // New state for save success animation
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  // New state for toast animations
+  const [toastMsg, setToastMsg] = useState('');
 
   // File Input Ref for Import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +81,11 @@ function App() {
       try { setRecords(JSON.parse(saved)); } catch (e) { console.error("Failed to load records"); }
     }
   }, []);
+
+  const showToast = (msg: string) => {
+      setToastMsg(msg);
+      setTimeout(() => setToastMsg(''), 2500);
+  };
 
   const saveRecordsToStorage = (newRecords: Record[]) => {
     try {
@@ -140,12 +145,9 @@ function App() {
         saveRecordsToStorage(newRecs);
     }
 
-    // If auto-named, clear the input so the next time the user comes back,
-    // it's empty and generates the NEXT number (instead of keeping "Case 1" in the field)
     if (isAutoNamed) {
         setInput(prev => ({ ...prev, name: '' }));
     } else {
-        // If manually named, keep it (optional, but good for tweaking)
         setInput(prev => ({ ...prev, name: finalName }));
     }
 
@@ -165,9 +167,7 @@ function App() {
     saveRecordsToStorage(newRecords);
     setCurrentRecord(updatedRecord);
     
-    // Show success animation
-    setShowSaveSuccess(true);
-    setTimeout(() => setShowSaveSuccess(false), 2000);
+    showToast("保存成功");
   };
 
   const handleAIAnalyze = async () => {
@@ -217,8 +217,8 @@ function App() {
 
   // --- Backup & Restore Logic ---
 
-  const handleBackup = (e: React.MouseEvent) => {
-      e.preventDefault(); // Prevent default
+  const handleBackup = async (e: React.MouseEvent) => {
+      e.preventDefault();
       e.stopPropagation();
 
       if (records.length === 0) {
@@ -226,21 +226,49 @@ function App() {
           return;
       }
       
+      const fileName = `bazi_backup_${new Date().toISOString().slice(0,10)}.json`;
+      const dataStr = JSON.stringify(records, null, 2);
+      
+      // Strategy 1: Web Share API with File
+      if (navigator.canShare && navigator.share) {
+          try {
+              const file = new File([dataStr], fileName, { type: 'application/json' });
+              const shareData = {
+                  files: [file],
+                  title: '八字数据备份',
+              };
+              if (navigator.canShare(shareData)) {
+                  await navigator.share(shareData);
+                  return;
+              }
+          } catch (err) {
+              console.warn("Share File failed", err);
+          }
+      }
+
+      // Strategy 2: Legacy Download (works on Android/Desktop, sometimes fails on iOS WebViews)
       try {
-          const dataStr = JSON.stringify(records, null, 2);
           const blob = new Blob([dataStr], { type: "application/json" });
           const url = URL.createObjectURL(blob);
-          
           const a = document.createElement("a");
           a.href = url;
-          a.download = `玄青君八字_备份_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = fileName;
           document.body.appendChild(a);
-          a.click(); // Synchronous click
+          a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
+          showToast("已尝试下载备份文件");
+          return;
       } catch (err) {
-          console.error("Backup failed", err);
-          alert("备份失败，请重试");
+          console.warn("Legacy download failed", err);
+      }
+      
+      // Strategy 3: Clipboard Fallback (Last resort for restricted WebViews)
+      try {
+          await navigator.clipboard.writeText(dataStr);
+          alert("因系统限制无法直接导出文件。备份数据已复制到剪贴板，请粘贴到备忘录保存。");
+      } catch (err) {
+          alert("备份失败：无法导出文件也无法复制到剪贴板。");
       }
   };
 
@@ -259,23 +287,21 @@ function App() {
               const parsed = JSON.parse(json);
               
               if (Array.isArray(parsed)) {
-                  // Merge Logic
                   const existingIds = new Set(records.map(r => r.id));
                   const newUniqueRecords = parsed.filter((r: Record) => !existingIds.has(r.id));
                   const combinedRecords = [...newUniqueRecords, ...records];
                   combinedRecords.sort((a, b) => b.createdAt - a.createdAt);
                   
                   saveRecordsToStorage(combinedRecords);
-                  alert(`成功恢复/导入 ${newUniqueRecords.length} 条新记录！`);
+                  showToast(`成功导入 ${newUniqueRecords.length} 条记录`);
                   setShowSettings(false);
               } else {
-                  alert("文件格式不正确：内容必须是记录列表");
+                  alert("文件格式不正确");
               }
           } catch (err) {
               console.error(err);
-              alert("导入失败：文件损坏或格式错误");
+              alert("导入失败：文件格式错误");
           }
-          // Reset value
           if (fileInputRef.current) fileInputRef.current.value = '';
       };
       reader.readAsText(file);
@@ -283,7 +309,6 @@ function App() {
 
 
   const handleSearchDates = () => {
-      // Validate all fields selected
       const p = pillars;
       if (!p.yGan || !p.yZhi || !p.mGan || !p.mZhi || !p.dGan || !p.dZhi || !p.hGan || !p.hZhi) {
           alert("请完整选择四柱干支");
@@ -321,7 +346,6 @@ function App() {
           setInput({ 
               ...input, 
               calendarType: mode === 'SOLAR' ? CalendarType.SOLAR : CalendarType.LUNAR,
-              // Reset minute to 0 if switching to Lunar to keep it clean
               minute: mode === 'SOLAR' ? input.minute : 0 
           });
       }
@@ -332,23 +356,14 @@ function App() {
       return input.calendarType === CalendarType.SOLAR ? 'SOLAR' : 'LUNAR';
   };
 
-  // --- Helpers for Filtering & Options ---
-
-  // Filter Branches based on Stem (Yang pairs with Yang, Yin with Yin)
   const getFilteredZhi = (selectedGan: string) => {
-      if (!selectedGan) return []; // If no stem, maybe show none or all? Let's show empty to force Stem first.
-      
+      if (!selectedGan) return [];
       const ganIdx = GAN.indexOf(selectedGan);
-      if (ganIdx === -1) return ZHI; // Should not happen
-
-      // Even Gan (0, 2...) are Yang -> Filter for Even Zhi
-      // Odd Gan (1, 3...) are Yin -> Filter for Odd Zhi
+      if (ganIdx === -1) return ZHI;
       const isYang = ganIdx % 2 === 0;
-      
       return ZHI.filter((_, idx) => (idx % 2 === 0) === isYang);
   };
 
-  // --- Computed Options ---
   const lunarTimeOptions = useMemo(() => {
     if (input.processEarlyLateRat) {
         return LUNAR_TIMES;
@@ -359,9 +374,6 @@ function App() {
   }, [input.processEarlyLateRat]);
 
 
-  // --- UI Renders ---
-
-  // Minimalist Input Group (No Box)
   const renderInputGroup = (content: React.ReactNode) => (
     <div className="mb-4 px-2">
        {content}
@@ -372,14 +384,12 @@ function App() {
       if (input.calendarType === CalendarType.LUNAR) {
           return LUNAR_MONTHS.map((m, idx) => <option key={idx} value={idx + 1}>{m}</option>);
       }
-      // Fixed: Return just the number for Solar options, as the "Month" unit is displayed externally
       return Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>);
   };
   const getDayOptions = () => {
       if (input.calendarType === CalendarType.LUNAR) {
           return LUNAR_DAYS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>);
       }
-      // Fixed: Return just the number for Solar options
       return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>);
   };
 
@@ -389,7 +399,6 @@ function App() {
         .sort();
     
     return (
-    // Added safe-area padding to top
     <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] pb-6 font-sans bg-[#fff8ea]">
       <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
@@ -398,7 +407,6 @@ function App() {
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
         
-        {/* Name & Gender - Minimal */}
         {renderInputGroup(
             <div className="flex gap-4 items-end border-b border-[#d6cda4] pb-2">
                 <input type="text" placeholder="请输入姓名 (为空则自动命名)" value={input.name}
@@ -420,7 +428,6 @@ function App() {
             </div>
         )}
 
-        {/* Mode Switcher - Minimal Pills */}
         <div className="flex justify-center mb-6">
             <div className="flex gap-1">
                 {[
@@ -444,13 +451,10 @@ function App() {
             </div>
         </div>
 
-        {/* Dynamic Content Area */}
         <div className="px-2 mb-4">
             {inputMode === 'date' ? (
                 <div className="space-y-6">
-                     {/* Date Selectors */}
                      <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-2 text-center`}>
-                         {/* Year */}
                          <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
@@ -459,7 +463,6 @@ function App() {
                              <span className="text-xs text-[#5c4033] ml-0.5">年</span>
                          </div>
                          
-                         {/* Month */}
                          <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
@@ -468,7 +471,6 @@ function App() {
                              {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">月</span>}
                          </div>
 
-                         {/* Day */}
                          <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
                              <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
                                  className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
@@ -477,7 +479,6 @@ function App() {
                              {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">日</span>}
                          </div>
 
-                         {/* Hour */}
                          {input.calendarType === CalendarType.LUNAR ? (
                             <div className="flex flex-row items-center justify-center col-span-1 border-b border-[#d6cda4] pb-1">
                                 <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
@@ -507,7 +508,6 @@ function App() {
                          )}
                      </div>
                      
-                     {/* Options Checkboxes */}
                      <div className="flex flex-col items-end gap-2 pt-2">
                          <label className="flex items-center gap-2 cursor-pointer group select-none">
                             <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
@@ -532,7 +532,6 @@ function App() {
                          </label>
                      </div>
 
-                     {/* Location */}
                      <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
                         <MapPin className="text-[#a89f91]" size={16} />
                         <select value={input.selectedCityKey} onChange={(e) => setInput({...input, selectedCityKey: e.target.value})}
@@ -543,7 +542,6 @@ function App() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {/* Manual Pillar Selection */}
                     <div className="grid grid-cols-4 gap-4">
                          {['年','月','日','时'].map((t,i) => (
                              <div key={i} className="text-center text-[#8c7b75] text-xs font-serif">{t}柱</div>
@@ -555,20 +553,17 @@ function App() {
                                  [pillars.dGan, pillars.dZhi, 'dGan', 'dZhi'],
                                  [pillars.hGan, pillars.hZhi, 'hGan', 'hZhi']
                              ].map(([gVal, zVal, gKey, zKey]: any, idx) => {
-                                 // Calculate colors for selected values
                                  const gColor = gVal ? ELEMENT_COLORS[STEM_ELEMENTS[gVal]] : 'text-[#a89f91]';
                                  const zColor = zVal ? ELEMENT_COLORS[BRANCH_ELEMENTS[zVal]] : 'text-[#a89f91]';
                                  const filteredZhi = getFilteredZhi(gVal);
 
                                  return (
                                  <div key={idx} className="flex flex-col gap-3">
-                                     {/* Stem Select */}
                                      <div className="relative border-b border-[#d6cda4]">
                                          <select 
                                             className={`w-full bg-transparent text-center appearance-none text-xl font-bold py-1 outline-none ${gColor}`}
                                             value={gVal} 
                                             onChange={e => {
-                                                // Reset branch when stem changes to ensure validity
                                                 setPillars({...pillars, [gKey]: e.target.value, [zKey]: ''});
                                             }}
                                          >
@@ -579,13 +574,12 @@ function App() {
                                          </select>
                                      </div>
 
-                                     {/* Branch Select */}
                                      <div className="relative border-b border-[#d6cda4]">
                                         <select 
                                             className={`w-full bg-transparent text-center appearance-none text-xl font-bold py-1 outline-none ${zColor}`}
                                             value={zVal} 
                                             onChange={e => setPillars({...pillars, [zKey]: e.target.value})}
-                                            disabled={!gVal} // Disable branch if no stem selected
+                                            disabled={!gVal}
                                          >
                                             <option value="">-</option>
                                             {filteredZhi.map(z => (
@@ -627,7 +621,6 @@ function App() {
             )}
         </div>
 
-        {/* Group Selection - Minimal */}
         <div className="relative mb-2 px-2 z-20">
             <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
                 <FolderInput className="text-[#a89f91]" size={16} />
@@ -644,7 +637,6 @@ function App() {
                      <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-[#d6cda4] pointer-events-none" />
                 </div>
             </div>
-            {/* Suggestions */}
             {showGroupSuggestions && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-[#fffcf5] border border-[#d6cda4] rounded shadow-lg max-h-40 overflow-y-auto z-30">
                      {['默认分组', ...uniqueGroups].map(g => (
@@ -664,7 +656,6 @@ function App() {
         <div className="flex-1"></div>
 
         <div className="flex items-center gap-2 mt-6 pt-2 pb-12 px-1">
-            {/* Settings/Data Button - 10% (flex-1) */}
             <div className="flex-[1] flex justify-center">
                 <button
                     type="button"
@@ -675,12 +666,10 @@ function App() {
                 </button>
             </div>
 
-            {/* Main Arrange Button - 70% (flex-7) */}
             <Button onClick={handleArrange} className="flex-[7] h-9 p-0 text-base shadow-lg">
                 立刻排盘
             </Button>
             
-            {/* History Button - 20% (flex-2) */}
             <Button
                 type="button"
                 variant="secondary"
@@ -701,7 +690,6 @@ function App() {
     const { chart } = currentRecord;
     const currentYear = new Date().getFullYear();
 
-    // Determine current Da Yun
     let currentDaYunStr = "运前";
     if (chart.daYun.length > 0) {
         if (currentYear < chart.daYun[0].startYear) {
@@ -714,22 +702,20 @@ function App() {
             if (activeYun) {
                 currentDaYunStr = activeYun.ganZhi;
             } else {
-                currentDaYunStr = chart.daYun[chart.daYun.length - 1].ganZhi; // Post last luck
+                currentDaYunStr = chart.daYun[chart.daYun.length - 1].ganZhi; 
             }
         }
     }
 
     return (
       <div className="flex flex-col min-h-screen bg-[#fffbe6] pb-20 font-sans text-[#1c1917] select-none">
-        {/* Save Success Toast */}
-        {showSaveSuccess && (
+        {toastMsg && (
             <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-6 py-3 rounded-lg z-[80] flex items-center gap-2 shadow-2xl animate-fadeIn">
                 <Check size={20} className="text-green-400" />
-                <span className="font-bold">保存成功</span>
+                <span className="font-bold">{toastMsg}</span>
             </div>
         )}
 
-        {/* Custom Header matching the image - Added Safe Area Padding */}
         <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-auto min-h-[48px] pt-[max(0.5rem,env(safe-area-inset-top))] pb-1 px-2 shadow-md">
            <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
               返回
@@ -742,48 +728,46 @@ function App() {
 
         <div className="flex-1 overflow-y-auto p-2">
             
-            {/* Top Text Info Section - INCREASED to text-[15px] */}
             <div className="space-y-1 text-[15px] leading-tight text-[#333]">
                 <div>出生时间：{chart.solarDateStr}</div>
                 <div>出生时间：{chart.lunarDateStr}</div>
                 <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
             </div>
 
-            {/* Four Pillars Section - Left Aligned Layout */}
             <div className="mt-2 pl-2">
                 <div className="flex gap-2">
-                    {/* Gender/Mode Label - INCREASED to text-[15px] */}
                     <div className="w-10 flex items-start justify-start text-[15px] font-bold text-[#1c1917] mt-1 whitespace-nowrap">
                         {currentRecord.gender}：
                     </div>
 
-                    {/* Pillars Grid */}
-                    <div className="grid grid-cols-4 gap-0 text-center relative w-[300px]">
-                         {/* Na Yin Row - INCREASED to text-[15px], adjusted height h-6 */}
+                    {/* Responsive Grid - Max width restricted for larger screens to keep pillars close */}
+                    <div className="grid grid-cols-4 gap-0 text-center relative w-full max-w-[320px]">
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ny-${i}`} className="text-[15px] text-[#4a4a4a] h-6">{p.naYin}</div>
                          ))}
                          
-                         {/* Ten God Row - INCREASED to text-[15px], adjusted height h-6 */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`tg-${i}`} className="text-[15px] text-[#4a4a4a] h-6">{p.stemTenGod}</div>
                          ))}
                          
-                         {/* Stem Row - Main 8 Characters KEEP LARGE (text-2xl) */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`s-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.stemElement]}`}>
                                  {p.stem}
                              </div>
                          ))}
                          
-                         {/* Branch Row - Main 8 Characters KEEP LARGE (text-2xl) */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]}`}>
+                             <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]} relative`}>
                                  {p.branch}
+                                 {/* Kong Wang Positioned Relative to Hour Pillar (Index 3) */}
+                                 {i === 3 && (
+                                     <div className="absolute left-[80%] top-[40%] text-[15px] text-red-600 whitespace-nowrap transform -translate-y-1/2">
+                                         [{chart.dayKongWang}空]
+                                     </div>
+                                 )}
                              </div>
                          ))}
                          
-                         {/* Hidden Stems List - INCREASED to text-[15px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`hs-${i}`} className="flex flex-col items-center mt-1 space-y-0.5">
                                  {p.hiddenStems.map((hs, idx) => (
@@ -795,59 +779,43 @@ function App() {
                              </div>
                          ))}
                          
-                         {/* Life Stage - INCREASED to text-[15px] */}
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ls-${i}`} className="mt-2 text-[15px] text-[#333]">{p.lifeStage}</div>
                          ))}
-
-                         {/* Kong Wang Overlay - INCREASED to text-[15px] - CHANGED from translate-x-12 to translate-x-2 (Moved Left) */}
-                         <div className="absolute right-0 top-16 text-[15px] text-red-600 transform translate-x-2">
-                             [{chart.dayKongWang}空]
-                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Middle Info Block - INCREASED to text-[15px] */}
             <div className="mt-1 space-y-0.5 text-[15px] leading-snug">
                 <div className="flex gap-2">
                     <span className="text-green-700">司令: {chart.renYuanSiLing} [设置]</span>
                 </div>
             </div>
 
-            {/* Da Yun Header - INCREASED to text-[15px] */}
             <div className="mt-1 text-[15px]">
                 <div className="text-[#333]">{chart.startLuckText} <span className="text-green-600">[设置]</span></div>
                 <div className="text-[#333]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">{currentDaYunStr}</span></div>
             </div>
 
-            {/* Da Yun & Liu Nian Matrix - Horizontal Mode */}
-            {/* Added touch-action: pan-x to allow horizontal scroll without triggering page navigation */}
             <div className="mt-1 overflow-x-auto touch-pan-x">
                 <div className="min-w-max">
                      <div className="flex">
-                         {/* Header Column (Yun Qian) */}
                          <div className="flex flex-col w-12 items-center shrink-0">
                              <div className="h-4"></div>
                              <div className="h-4"></div>
-                             {/* Check if current year is in Yun Qian list */}
                              {(() => {
                                  const isCurrentYunQian = chart.yunQian.some(y => y.year === currentYear);
-                                 const highlightColor = 'text-[#8B0000]'; // Darker Red
+                                 const highlightColor = 'text-[#8B0000]'; 
                                  
                                  return (
                                      <>
-                                        {/* Header is RED if active, acting as pillar text - INCREASED to text-lg (approx 18px) */}
                                         <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
-                                        {/* Age and Year - Keep text-[15px] */}
                                         <div className="h-4 text-[15px] text-[#333]">1</div>
                                         <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         
-                                        {/* Vertical Liu Nian list for Yun Qian - Keep text-[15px] */}
                                         <div className="mt-2 flex flex-col items-center gap-1">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
-                                                // If current column (YunQian), all years are red. Specific year is bold red.
                                                 const textColor = isCurrentYunQian 
                                                     ? (isCurrent ? `${highlightColor} font-bold` : highlightColor) 
                                                     : 'text-[#333]';
@@ -864,33 +832,26 @@ function App() {
                              })()}
                          </div>
 
-                         {/* Da Yun Columns */}
                          {chart.daYun.map((yun, idx) => {
-                             // Highlight Logic
                              const nextYun = chart.daYun[idx + 1];
                              const isCurrentDaYun = currentYear >= yun.startYear && (!nextYun || currentYear < nextYun.startYear);
-                             const highlightColor = 'text-[#8B0000]'; // Dark Red
+                             const highlightColor = 'text-[#8B0000]'; 
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* NaYin/TenGod - Keep text-[15px] (User said except Da Yun details, but these are small headers. Keeping 15px is safe) */}
                                  <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
                                  
-                                 {/* Da Yun Pillar - Red if current - INCREASED to text-lg (approx 18px) */}
                                  <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? highlightColor : 'text-[#1c1917]'} font-bold`}>
                                      <span className="text-lg tracking-wide">{yun.ganZhi}</span> 
                                  </div>
                                  
-                                 {/* Age & Year - Keep text-[15px] */}
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
-                                 {/* Liu Nian Vertical List - Keep text-[15px] */}
                                  <div className="mt-2 flex flex-col items-center gap-1">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
-                                         // Highlight entire list red if current Da Yun
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
                                          const textColor = isCurrentLiuNian ? `${highlightColor} font-bold` : baseColor;
                                          
@@ -907,7 +868,6 @@ function App() {
                 </div>
             </div>
 
-            {/* Master's Comment / Notes Section - Integrated into Bottom */}
             <div className="mt-8 mb-6 px-2">
                 <div className="bg-white/60 border border-[#d6cda4] rounded-lg p-3 shadow-sm">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-[#e5e0d0]">
@@ -956,7 +916,6 @@ function App() {
         onBackup={handleBackup}
       />
       
-      {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn">
             <div className="bg-[#fffcf5] rounded-xl w-full max-w-xs border border-[#d6cda4] shadow-2xl relative overflow-hidden">
@@ -1000,7 +959,7 @@ function App() {
                     <div className="bg-[#fdfbf6] p-3 rounded border border-[#f0ebda] text-[11px] text-[#8c7b75] leading-relaxed">
                         <p className="flex items-start gap-1">
                             <FileText size={12} className="mt-0.5 shrink-0"/>
-                            更新 App 前，请先点击“备份”将数据保存到手机“文件”中。更新完成后，点击“恢复”选择该文件即可找回记录。
+                            更新 App 前，请先点击“备份”将数据保存到手机“文件”中。如果无反应，将自动复制到剪贴板，请粘贴保存。更新完成后，点击“恢复”导入。
                         </p>
                     </div>
                 </div>
@@ -1008,7 +967,6 @@ function App() {
         </div>
       )}
 
-      {/* Hidden File Input used by both Settings Modal and History Drawer */}
       <input 
         type="file" 
         ref={fileInputRef} 
