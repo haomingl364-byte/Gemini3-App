@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3, Download, Upload, FileText, Copy } from 'lucide-react';
+import { Menu, Save, Settings, MapPin, Calendar, RotateCcw, ArrowLeft, Search, X, Fingerprint, FolderInput, ChevronDown, Check, BookOpen, ChevronRight, Edit3, Download, Upload, FileText, Copy, ChevronLeft } from 'lucide-react';
 import { UserInput, Gender, Record, CalendarType } from './types';
 import { calculateBaZi, findDatesFromPillars, MatchingDate } from './services/baziCalculator';
 import { analyzeBaZi } from './services/geminiService';
@@ -65,6 +65,9 @@ function App() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
   
+  // Real-time clock for display
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   // New state for toast animations
   const [toastMsg, setToastMsg] = useState('');
 
@@ -80,7 +83,27 @@ function App() {
     if (saved) {
       try { setRecords(JSON.parse(saved)); } catch (e) { console.error("Failed to load records"); }
     }
+    
+    // Timer for current time display
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
   }, []);
+
+  // Calculate current BaZi for display (Object instead of string)
+  const currentBaZi = useMemo(() => {
+      try {
+          return calculateBaZi({
+             ...initialInput,
+             year: currentTime.getFullYear(),
+             month: currentTime.getMonth() + 1,
+             day: currentTime.getDate(),
+             hour: currentTime.getHours(),
+             minute: currentTime.getMinutes()
+          });
+      } catch (e) {
+          return null;
+      }
+  }, [currentTime]);
 
   const showToast = (msg: string) => {
       setToastMsg(msg);
@@ -246,7 +269,7 @@ function App() {
           }
       }
 
-      // Strategy 2: Legacy Download (works on Android/Desktop, sometimes fails on iOS WebViews)
+      // Strategy 2: Legacy Download
       try {
           const blob = new Blob([dataStr], { type: "application/json" });
           const url = URL.createObjectURL(blob);
@@ -263,7 +286,7 @@ function App() {
           console.warn("Legacy download failed", err);
       }
       
-      // Strategy 3: Clipboard Fallback (Last resort for restricted WebViews)
+      // Strategy 3: Clipboard Fallback
       try {
           await navigator.clipboard.writeText(dataStr);
           alert("因系统限制无法直接导出文件。备份数据已复制到剪贴板，请粘贴到备忘录保存。");
@@ -392,6 +415,28 @@ function App() {
       }
       return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>);
   };
+  
+  // Helpers for 1:1 Display
+  const getDisplayData = () => {
+    if (!currentBaZi) return null;
+    const year = currentTime.getFullYear();
+    const month = String(currentTime.getMonth() + 1).padStart(2, '0');
+    const day = String(currentTime.getDate()).padStart(2, '0');
+    const hour = String(currentTime.getHours()).padStart(2, '0');
+    const minute = String(currentTime.getMinutes()).padStart(2, '0');
+    
+    // Format Lunar: "2025年十月十七 酉时"
+    const lunarParts = currentBaZi.lunarDateStr.replace('农历', '').split('年');
+    const lunarRest = lunarParts[1] || ''; 
+    const [lunarDate, lunarTimePart] = lunarRest.split(', ');
+    const lunarDisplay = `农历: ${year}年${lunarDate} ${lunarTimePart}`;
+    
+    const solarDisplay = `公历: ${year}年${month}月${day}日 ${hour}:${minute}`;
+    
+    return { lunarDisplay, solarDisplay };
+  };
+
+  const displayData = getDisplayData();
 
   const renderForm = () => {
     const uniqueGroups = Array.from(new Set(records.map(r => r.group || '默认分组')))
@@ -508,31 +553,53 @@ function App() {
                          )}
                      </div>
                      
-                     <div className="flex flex-col items-end gap-2 pt-2">
-                         <label className="flex items-center gap-2 cursor-pointer group select-none">
-                            <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
-                                {input.processEarlyLateRat && <Check size={10} className="text-white" />}
-                            </div>
-                            <input type="checkbox" className="hidden" 
-                                checked={input.processEarlyLateRat} 
-                                onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
-                            />
-                            <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">区分早晚子时</span>
-                         </label>
+                     {/* 1:1 Current BaZi Display & Settings in one row */}
+                     {currentBaZi && displayData && (
+                         <div className="mt-6 mb-2 flex justify-between items-start px-2">
+                             {/* Left: BaZi & Dates */}
+                             <div className="flex flex-col gap-0.5">
+                                 <div className="flex gap-5 pl-1">
+                                     {[currentBaZi.year, currentBaZi.month, currentBaZi.day, currentBaZi.hour].map((p, i) => (
+                                         <div key={i} className="flex flex-col items-center gap-1">
+                                             <span className="text-xl font-light text-stone-600 leading-none">{p.stem}</span>
+                                             <span className="text-xl font-light text-stone-600 leading-none">{p.branch}</span>
+                                         </div>
+                                     ))}
+                                 </div>
+                                 <div className="text-[10px] text-stone-400 leading-tight font-sans tracking-wide pl-1 mt-0.5">
+                                     <div>{displayData.lunarDisplay}</div>
+                                     <div>{displayData.solarDisplay}</div>
+                                 </div>
+                             </div>
 
-                         <label className="flex items-center gap-2 cursor-pointer group select-none">
-                            <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.autoSave ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
-                                {input.autoSave && <Check size={10} className="text-white" />}
-                            </div>
-                            <input type="checkbox" className="hidden" 
-                                checked={input.autoSave} 
-                                onChange={(e) => setInput({...input, autoSave: e.target.checked})} 
-                            />
-                            <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">是否保存案例</span>
-                         </label>
-                     </div>
+                             {/* Right: Settings */}
+                             <div className="flex flex-col gap-3 pt-1">
+                                 <label className="flex items-center justify-end gap-2 cursor-pointer group select-none">
+                                    <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">早晚子时</span>
+                                    <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.processEarlyLateRat ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                        {input.processEarlyLateRat && <Check size={8} className="text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" 
+                                        checked={input.processEarlyLateRat} 
+                                        onChange={(e) => setInput({...input, processEarlyLateRat: e.target.checked})} 
+                                    />
+                                </label>
 
-                     <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
+                                <label className="flex items-center justify-end gap-2 cursor-pointer group select-none">
+                                    <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">保存案例</span>
+                                    <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.autoSave ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                        {input.autoSave && <Check size={8} className="text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" 
+                                        checked={input.autoSave} 
+                                        onChange={(e) => setInput({...input, autoSave: e.target.checked})} 
+                                    />
+                                </label>
+                             </div>
+                         </div>
+                     )}
+
+                     <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2 mt-4">
                         <MapPin className="text-[#a89f91]" size={16} />
                         <select value={input.selectedCityKey} onChange={(e) => setInput({...input, selectedCityKey: e.target.value})}
                             className="flex-1 bg-transparent text-[#450a0a] text-sm outline-none">
@@ -717,12 +784,15 @@ function App() {
         )}
 
         <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-auto min-h-[48px] pt-[max(0.5rem,env(safe-area-inset-top))] pb-1 px-2 shadow-md">
-           <button onClick={() => setView('form')} className="px-3 py-1 bg-[#b93b3b] rounded border border-[#cf5454] text-white text-sm shadow">
-              返回
+           {/* Custom Wide Chevron Back Button */}
+           <button onClick={() => setView('form')} className="px-3 py-2 text-white hover:text-white/80 transition-colors">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 4l-8 8 8 8" />
+              </svg>
            </button>
            <h1 className="font-calligraphy text-2xl text-white tracking-widest drop-shadow-md">玄青君八字</h1>
-           <button onClick={() => setHistoryOpen(true)} className="p-1.5 bg-[#b93b3b] rounded border border-[#cf5454] text-white shadow">
-              <Menu size={20} />
+           <button onClick={() => setHistoryOpen(true)} className="p-1 text-white hover:text-white/80 transition-colors">
+              <Menu size={24} />
            </button>
         </div>
 
@@ -731,16 +801,20 @@ function App() {
             <div className="space-y-1 text-[15px] leading-tight text-[#333]">
                 <div>出生时间：{chart.solarDateStr}</div>
                 <div>出生时间：{chart.lunarDateStr}</div>
-                <div>出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span></div>
+                <div>
+                    出生于 <span className="text-green-700 font-bold">{chart.solarTermStr.replace('出生于', '')} [节气]</span>
+                    <span className="ml-2 text-stone-500 text-sm">空亡：{chart.dayKongWang}</span>
+                </div>
             </div>
 
-            <div className="mt-2 pl-2">
+            {/* Shift content left by removing padding-left and adjusting margin */}
+            <div className="mt-2 pl-0">
                 <div className="flex gap-2">
-                    <div className="w-10 flex items-start justify-start text-[15px] font-bold text-[#1c1917] mt-1 whitespace-nowrap">
+                    <div className="w-10 flex items-start justify-start text-[15px] font-bold text-[#1c1917] mt-1 whitespace-nowrap pl-1">
                         {currentRecord.gender}：
                     </div>
 
-                    {/* Responsive Grid - Max width restricted for larger screens to keep pillars close */}
+                    {/* Grid adjustments */}
                     <div className="grid grid-cols-4 gap-0 text-center relative w-full max-w-[320px]">
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
                              <div key={`ny-${i}`} className="text-[15px] text-[#4a4a4a] h-6">{p.naYin}</div>
@@ -757,14 +831,8 @@ function App() {
                          ))}
                          
                          {[chart.year, chart.month, chart.day, chart.hour].map((p, i) => (
-                             <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]} relative`}>
+                             <div key={`b-${i}`} className={`text-2xl font-bold ${ELEMENT_COLORS[p.branchElement]}`}>
                                  {p.branch}
-                                 {/* Kong Wang Positioned Relative to Hour Pillar (Index 3) */}
-                                 {i === 3 && (
-                                     <div className="absolute left-[80%] top-[40%] text-[15px] text-red-600 whitespace-nowrap transform -translate-y-1/2">
-                                         [{chart.dayKongWang}空]
-                                     </div>
-                                 )}
                              </div>
                          ))}
                          

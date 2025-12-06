@@ -29,6 +29,13 @@
       input, select, textarea {
         font-size: 16px !important; /* Prevent iOS zoom on focus */
       }
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
     </style>
   <script type="importmap">
 {
@@ -38,7 +45,8 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-    "lunar-javascript": "https://esm.sh/lunar-javascript@1.6.13"
+    "lunar-javascript": "https://esm.sh/lunar-javascript@1.6.13",
+    "pinyin-pro": "https://esm.sh/pinyin-pro@3.19.3"
   }
 }
 </script>
