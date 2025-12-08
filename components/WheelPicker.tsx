@@ -32,14 +32,17 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHapticIndex = useRef<number>(-1);
+  const lastVibrateTime = useRef<number>(0);
   const isInternalScroll = useRef(false);
   const lastEmittedValue = useRef<number | string | null>(null);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTouching = useRef(false);
 
-  // Initialize scroll position
+  // Initialize scroll position & Sync external value changes
   useEffect(() => {
     if (containerRef.current) {
       // If the new value matches what we just emitted via scroll, 
-      // DO NOT force the scroll position. Let CSS snap finish smoothly.
+      // DO NOT force the scroll position immediately to allow momentum to settle if active.
       if (value === lastEmittedValue.current) {
           return;
       }
@@ -48,42 +51,82 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
       if (selectedIndex !== -1) {
         const targetScroll = selectedIndex * ITEM_HEIGHT;
         
-        // Only adjust if significantly off to prevent fighting with scroll snap
-        if (Math.abs(containerRef.current.scrollTop - targetScroll) > 5) {
+        // Only adjust if significantly off to prevent fighting
+        if (Math.abs(containerRef.current.scrollTop - targetScroll) > 1) {
              isInternalScroll.current = true;
-             containerRef.current.scrollTop = targetScroll;
+             containerRef.current.scrollTo({
+                 top: targetScroll,
+                 behavior: 'smooth'
+             });
              // Reset internal flag after a short delay
-             setTimeout(() => { isInternalScroll.current = false; }, 50);
+             setTimeout(() => { isInternalScroll.current = false; }, 300);
         }
       }
     }
-  }, [value, options]); // Removed expanded from dependency to avoid scroll jump on expand
+  }, [value, options]);
+
+  // Snap to the nearest item when scrolling stops
+  const snapToNearest = () => {
+      if (!containerRef.current || isTouching.current) return;
+      
+      const scrollTop = containerRef.current.scrollTop;
+      const index = Math.round(scrollTop / ITEM_HEIGHT);
+      
+      // Clamp index
+      const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
+      const targetScroll = clampedIndex * ITEM_HEIGHT;
+
+      // Only scroll if we are misaligned
+      if (Math.abs(scrollTop - targetScroll) > 1) {
+          isInternalScroll.current = true;
+          containerRef.current.scrollTo({
+              top: targetScroll,
+              behavior: 'smooth'
+          });
+          setTimeout(() => { isInternalScroll.current = false; }, 300);
+      }
+      
+      // Ensure the value is synced one last time
+      if (options[clampedIndex]) {
+           const finalValue = options[clampedIndex].value;
+           if (finalValue !== value) {
+               lastEmittedValue.current = finalValue;
+               onChange(finalValue);
+           }
+      }
+  };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     // If scroll was programmatically triggered by useEffect, ignore logic
     if (isInternalScroll.current) return;
 
-    // NOTE: Removed onInteract() call here. 
-    // Expansion should only happen on explicit touch/click, not momentum scroll.
-    // This allows the picker to be collapsed externally (e.g. input focus) while still settling.
-    
     const scrollTop = e.currentTarget.scrollTop;
+    
+    // 1. Debounce Snap: Detect scroll end
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    scrollTimeout.current = setTimeout(snapToNearest, 100); // 100ms settled time
+
+    // 2. Calculate Index
     const index = Math.round(scrollTop / ITEM_HEIGHT);
     
-    // Haptic Feedback & Value Update
+    // 3. Haptic Feedback & Value Update
     if (index !== lastHapticIndex.current) {
-        // Haptic feedback (Vibration)
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate(10); // Short vibration simulating a tick
-        }
-        
         lastHapticIndex.current = index;
         
-        // Update value
+        // Throttled Vibration: Reduce "gear" feel
+        const now = Date.now();
+        if (now - lastVibrateTime.current > 50) { // Max 20 vibrations per second
+             if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(2); // Very light tick
+            }
+            lastVibrateTime.current = now;
+        }
+        
+        // Update value (Realtime, but filtered by React in parent usually)
         if (index >= 0 && index < options.length) {
              const newValue = options[index].value;
              if (newValue !== value) {
-                 lastEmittedValue.current = newValue; // Track that we caused this change
+                 lastEmittedValue.current = newValue;
                  onChange(newValue);
              }
         }
@@ -91,9 +134,19 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
   };
 
   const handleInteractionStart = () => {
+      isTouching.current = true;
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      
       if (!expanded && onInteract) {
           onInteract();
       }
+  };
+
+  const handleInteractionEnd = () => {
+      isTouching.current = false;
+      // Trigger snap check in case momentum was zero
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(snapToNearest, 150);
   };
 
   // Dynamic Styles
@@ -114,25 +167,30 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
         ></div>
 
         {/* Scroll Container */}
+        {/* Removed 'snap-y snap-mandatory' to allow fluid momentum scrolling */}
         <div 
             ref={containerRef}
-            className="h-full overflow-y-auto overflow-x-hidden snap-y snap-mandatory no-scrollbar relative z-10 overscroll-contain"
+            className="h-full overflow-y-auto overflow-x-hidden no-scrollbar relative z-10 overscroll-contain"
             style={{ 
                 paddingTop: `${currentPadding}px`, 
                 paddingBottom: `${currentPadding}px`,
-                transition: 'padding 0.3s ease-out', // Smooth padding animation to keep center alignment
+                transition: 'padding 0.3s ease-out', // Smooth padding animation
                 willChange: 'scroll-position'
             }}
             onScroll={handleScroll}
             onTouchStart={handleInteractionStart}
+            onTouchEnd={handleInteractionEnd}
             onMouseDown={handleInteractionStart}
+            onMouseUp={handleInteractionEnd}
+            onMouseLeave={handleInteractionEnd}
         >
             {options.map((opt, i) => {
                 const isSelected = opt.value === value;
                 return (
                     <div 
                         key={opt.value} 
-                        className={`h-[40px] flex items-center justify-center snap-center transition-all duration-200 cursor-pointer w-full`}
+                        // Removed 'snap-center'
+                        className={`h-[40px] flex items-center justify-center transition-all duration-200 cursor-pointer w-full`}
                         onClick={() => {
                             if (containerRef.current) {
                                 handleInteractionStart();
@@ -140,6 +198,8 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
                                     top: i * ITEM_HEIGHT,
                                     behavior: 'smooth'
                                 });
+                                // Manual snap triggers logic via scroll event, or we can force it:
+                                setTimeout(() => handleInteractionEnd(), 300);
                             }
                         }}
                     >
