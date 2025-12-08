@@ -57,6 +57,7 @@ function App() {
   const [showDateResults, setShowDateResults] = useState(false);
 
   const [currentRecord, setCurrentRecord] = useState<Record | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null); // Track if we are editing an existing record
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [records, setRecords] = useState<Record[]>([]);
@@ -73,6 +74,9 @@ function App() {
 
   // File Input Ref for Import
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Textarea Ref for auto-grow
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const years = Array.from({length: 150}, (_, i) => 1900 + i);
   const hours = Array.from({length: 24}, (_, i) => i);
@@ -88,6 +92,14 @@ function App() {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-resize textarea when noteDraft changes
+  useEffect(() => {
+    if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [noteDraft, view]);
 
   // Calculate current BaZi for display (Object instead of string)
   const currentBaZi = useMemo(() => {
@@ -134,6 +146,16 @@ function App() {
       return `案例${maxNum + 1}`;
   };
 
+  const handleReset = () => {
+      setInput(initialInput);
+      setPillars(initialPillars);
+      setEditingId(null);
+      setNoteDraft('');
+      setCurrentRecord(null);
+      setInputMode('date');
+      showToast("已重置");
+  };
+
   const handleArrange = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -142,33 +164,50 @@ function App() {
     let isAutoNamed = false;
 
     if (!finalName) {
+        // Only generate new name if not editing, or if editing and name is empty (keep old name? no, generate new)
         finalName = generateNextCaseName(records);
         isAutoNamed = true;
     }
 
     const chart = calculateBaZi({ ...input, name: finalName });
-    const newRecord: Record = {
-      id: Date.now().toString(),
+    
+    // Construct the Record object
+    const recordData: Record = {
+      id: editingId || Date.now().toString(), // Use existing ID if editing
       name: finalName,
       gender: input.gender,
       birthDate: `${input.year}-${input.month}-${input.day}`,
       birthTime: `${input.hour}:${input.minute}`,
       calendarType: input.calendarType,
       city: input.selectedCityKey,
-      createdAt: Date.now(),
+      createdAt: editingId ? (records.find(r => r.id === editingId)?.createdAt || Date.now()) : Date.now(),
       chart: chart,
-      notes: '',
+      notes: editingId ? (records.find(r => r.id === editingId)?.notes || '') : '',
       group: input.group || '默认分组'
     };
-    setCurrentRecord(newRecord);
-    setNoteDraft('');
+
+    setCurrentRecord(recordData);
+    if (!editingId) {
+        setNoteDraft(''); // Clear notes for new record
+    } else {
+        setNoteDraft(recordData.notes); // Preserve notes for edited record
+    }
     
     if (input.autoSave) {
-        const newRecs = [newRecord, ...records];
-        saveRecordsToStorage(newRecs);
+        let newRecords;
+        if (editingId) {
+            // Update existing
+            newRecords = records.map(r => r.id === editingId ? recordData : r);
+            showToast("案例已更新");
+        } else {
+            // Create new
+            newRecords = [recordData, ...records];
+            setEditingId(recordData.id); // Switch to editing mode for the new record
+        }
+        saveRecordsToStorage(newRecords);
     }
 
-    if (isAutoNamed) {
+    if (isAutoNamed && !editingId) {
         setInput(prev => ({ ...prev, name: '' }));
     } else {
         setInput(prev => ({ ...prev, name: finalName }));
@@ -211,6 +250,7 @@ function App() {
 
   const loadRecord = (rec: Record) => {
     setCurrentRecord(rec);
+    setEditingId(rec.id); // Set to edit mode
     setNoteDraft(rec.notes);
     const [y,m,d] = rec.birthDate.split('-').map(Number);
     const [h,min] = rec.birthTime.split(':').map(Number);
@@ -234,6 +274,7 @@ function App() {
       if (currentRecord?.id === id) {
         setView('form');
         setCurrentRecord(null);
+        setEditingId(null);
       }
     }
   };
@@ -448,6 +489,9 @@ function App() {
       <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
+        <button onClick={handleReset} className="absolute right-0 top-1/2 -translate-y-1/2 text-[#a89f91] hover:text-[#8B0000] p-2 transition-colors" title="重置/新排盘">
+            <RotateCcw size={18} />
+        </button>
       </div>
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
@@ -734,7 +778,7 @@ function App() {
             </div>
 
             <Button onClick={handleArrange} className="flex-[7] h-9 p-0 text-base shadow-lg">
-                立刻排盘
+                {editingId ? '更新排盘' : '立刻排盘'}
             </Button>
             
             <Button
@@ -881,7 +925,7 @@ function App() {
                                         <div className="h-4 text-[15px] text-[#333]">1</div>
                                         <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         
-                                        <div className="mt-2 flex flex-col items-center gap-1">
+                                        <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
                                                 const textColor = isCurrentYunQian 
@@ -917,7 +961,7 @@ function App() {
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
-                                 <div className="mt-2 flex flex-col items-center gap-1">
+                                 <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
@@ -959,7 +1003,8 @@ function App() {
                         </div>
                     </div>
                     <textarea
-                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-[17px] leading-relaxed text-[#450a0a] placeholder-[#a89f91]"
+                        ref={textareaRef}
+                        className="w-full min-h-[120px] bg-transparent outline-none resize-none text-[17px] leading-relaxed text-[#450a0a] placeholder-[#a89f91] overflow-hidden"
                         placeholder="在此输入命理分析..."
                         value={noteDraft}
                         onChange={(e) => setNoteDraft(e.target.value)}
