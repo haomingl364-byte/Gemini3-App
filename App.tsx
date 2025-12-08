@@ -57,6 +57,9 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [showDateResults, setShowDateResults] = useState(false);
 
+  // Wheel Expansion State
+  const [isPickerExpanded, setIsPickerExpanded] = useState(false);
+
   const [currentRecord, setCurrentRecord] = useState<Record | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null); // Track if we are editing an existing record
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -115,6 +118,13 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // Reset expansion when returning to form
+  useEffect(() => {
+      if (view === 'form') {
+          setIsPickerExpanded(false);
+      }
+  }, [view]);
+
   // Auto-resize textarea when noteDraft changes
   useEffect(() => {
     if (textareaRef.current) {
@@ -169,6 +179,7 @@ function App() {
       setPasteInput('');
       setCurrentRecord(null);
       setInputMode('date');
+      setIsPickerExpanded(false); // Reset expansion
       showToast("已重置");
   };
 
@@ -584,11 +595,10 @@ function App() {
         .sort();
     
     return (
-    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] pb-6 font-sans bg-[#fff8ea]">
+    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] font-sans bg-[#fff8ea]">
       <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
-        {/* Removed RotateCcw button */}
       </div>
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
@@ -657,7 +667,7 @@ function App() {
                          </button>
                      </div>
 
-                     {/* New Wheel Picker Interface - Removed Border & Background */}
+                     {/* Wheel Picker Interface */}
                      <div className="flex items-center justify-between">
                          <WheelPicker 
                              options={yearOptions} 
@@ -665,6 +675,8 @@ function App() {
                              onChange={(v) => setInput({ ...input, year: Number(v) })} 
                              label="年"
                              className="flex-1"
+                             expanded={isPickerExpanded}
+                             onInteract={() => setIsPickerExpanded(true)}
                          />
                          <WheelPicker 
                              options={monthOptions} 
@@ -672,6 +684,8 @@ function App() {
                              onChange={(v) => setInput({ ...input, month: Number(v) })} 
                              label={input.calendarType === CalendarType.SOLAR ? "月" : ""}
                              className="flex-1"
+                             expanded={isPickerExpanded}
+                             onInteract={() => setIsPickerExpanded(true)}
                          />
                          <WheelPicker 
                              options={dayOptions} 
@@ -679,6 +693,8 @@ function App() {
                              onChange={(v) => setInput({ ...input, day: Number(v) })} 
                              label={input.calendarType === CalendarType.SOLAR ? "日" : ""}
                              className="flex-1"
+                             expanded={isPickerExpanded}
+                             onInteract={() => setIsPickerExpanded(true)}
                          />
                          <WheelPicker 
                              options={hourOptions} 
@@ -686,6 +702,8 @@ function App() {
                              onChange={(v) => setInput({ ...input, hour: Number(v) })} 
                              label={input.calendarType === CalendarType.SOLAR ? "时" : ""}
                              className="flex-1"
+                             expanded={isPickerExpanded}
+                             onInteract={() => setIsPickerExpanded(true)}
                          />
                          {input.calendarType === CalendarType.SOLAR && (
                              <WheelPicker 
@@ -694,11 +712,13 @@ function App() {
                                  onChange={(v) => setInput({ ...input, minute: Number(v) })} 
                                  label="分"
                                  className="flex-1"
+                                 expanded={isPickerExpanded}
+                                 onInteract={() => setIsPickerExpanded(true)}
                              />
                          )}
                      </div>
                      
-                     {/* 1:1 Current BaZi Display & Settings in one row */}
+                     {/* 1:1 Current BaZi Display & Settings */}
                      {currentBaZi && displayData && (
                          <div className="mt-6 mb-2 flex justify-between items-start px-2">
                              {/* Left: BaZi & Dates */}
@@ -833,6 +853,7 @@ function App() {
             )}
         </div>
 
+        {/* RESTORED: Case Grouping Input */}
         <div className="relative mb-2 px-2 z-20">
             <div className="flex items-center gap-3 border-b border-[#d6cda4] pb-2">
                 <FolderInput className="text-[#a89f91]" size={16} />
@@ -841,7 +862,10 @@ function App() {
                          type="text"
                          value={input.group}
                          onChange={(e) => setInput({...input, group: e.target.value})}
-                         onFocus={() => setShowGroupSuggestions(true)}
+                         onFocus={() => {
+                             setShowGroupSuggestions(true);
+                             setIsPickerExpanded(false);
+                         }}
                          onBlur={() => setTimeout(() => setShowGroupSuggestions(false), 200)}
                          placeholder="输入或选择分组 (默认)"
                          className="w-full bg-transparent outline-none text-[#450a0a] text-sm"
@@ -864,32 +888,35 @@ function App() {
                 </div>
             )}
         </div>
-        
+
         <div className="flex-1"></div>
 
-        <div className="flex items-center gap-2 mt-6 pt-2 pb-12 px-1">
-            <div className="flex-[1] flex justify-center">
-                <button
-                    type="button"
-                    onClick={() => setShowSettings(true)}
-                    className="p-1.5 text-[#a89f91] hover:text-[#8B0000] hover:bg-[#eaddcf]/30 rounded-full transition-colors"
-                >
-                   <Settings size={20} />
-                </button>
-            </div>
+        {/* Sticky Action Bar */}
+        <div className="sticky bottom-0 bg-[#fff8ea] z-30 pb-6 pt-2 px-1 border-t border-[#d6cda4]/30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <div className="flex items-center gap-2">
+                <div className="flex-[1] flex justify-center">
+                    <button
+                        type="button"
+                        onClick={() => setShowSettings(true)}
+                        className="p-1.5 text-[#a89f91] hover:text-[#8B0000] hover:bg-[#eaddcf]/30 rounded-full transition-colors"
+                    >
+                    <Settings size={20} />
+                    </button>
+                </div>
 
-            <Button onClick={handleArrange} className="flex-[7] h-9 p-0 text-base shadow-lg">
-                {editingId ? '更新排盘' : '立刻排盘'}
-            </Button>
-            
-            <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setHistoryOpen(true)}
-                className="flex-[2] h-9 p-0 text-xs shadow-md border-[#d6cda4]"
-            >
-                命例
-            </Button>
+                <Button onClick={handleArrange} className="flex-[7] h-9 p-0 text-base shadow-lg">
+                    {editingId ? '更新排盘' : '立刻排盘'}
+                </Button>
+                
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setHistoryOpen(true)}
+                    className="flex-[2] h-9 p-0 text-xs shadow-md border-[#d6cda4]"
+                >
+                    命例
+                </Button>
+            </div>
         </div>
 
       </form>
@@ -930,7 +957,7 @@ function App() {
 
         <div className="sticky top-0 z-20 bg-[#961c1c] border-b border-[#700f0f] flex justify-between items-center h-auto min-h-[48px] pt-[max(0.5rem,env(safe-area-inset-top))] pb-1 px-2 shadow-md">
            {/* Custom Wide Chevron Back Button */}
-           <button onClick={() => setView('form')} className="px-3 py-2 text-white hover:text-white/80 transition-colors">
+           <button onClick={() => { setView('form'); setEditingId(null); }} className="px-3 py-2 text-white hover:text-white/80 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 4l-8 8 8 8" />
               </svg>
