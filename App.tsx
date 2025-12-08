@@ -7,6 +7,7 @@ import { APP_STORAGE_KEY, ELEMENT_COLORS, CITIES, GAN, ZHI, LUNAR_MONTHS, LUNAR_
 import { Button } from './components/Button';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { PillarDisplay } from './components/PillarDisplay';
+import { WheelPicker } from './components/WheelPicker';
 
 // Initialize with current date/time
 const now = new Date();
@@ -65,8 +66,9 @@ function App() {
   const [noteDraft, setNoteDraft] = useState('');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showGroupSuggestions, setShowGroupSuggestions] = useState(false);
-  
-  // Real-time clock for display
+  const [pasteInput, setPasteInput] = useState('');
+
+  // Real-time clock for display (Only used if needed, but wheel picker drives display now)
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // New state for toast animations
@@ -79,8 +81,28 @@ function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const years = Array.from({length: 150}, (_, i) => 1900 + i);
-  const hours = Array.from({length: 24}, (_, i) => i);
-  const minutes = Array.from({length: 60}, (_, i) => i);
+  // Generate Wheel Options
+  const yearOptions = years.map(y => ({ label: `${y}`, value: y }));
+  
+  const monthOptions = input.calendarType === CalendarType.LUNAR 
+      ? LUNAR_MONTHS.map((m, i) => ({ label: m, value: i + 1 }))
+      : Array.from({length: 12}, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
+
+  const dayOptions = input.calendarType === CalendarType.LUNAR
+      ? LUNAR_DAYS.map((d, i) => ({ label: d, value: i + 1 }))
+      : Array.from({length: 31}, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
+
+  const hourOptions = input.calendarType === CalendarType.LUNAR
+      ? (input.processEarlyLateRat 
+          ? LUNAR_TIMES.map(t => ({ label: t.name.split(' ')[0], value: t.value }))
+          : LUNAR_TIMES.filter(t => t.value !== 23).map(t => ({ 
+              label: t.value === 0 ? '子时' : t.name.split(' ')[0], 
+              value: t.value 
+            }))
+        )
+      : Array.from({length: 24}, (_, i) => ({ label: `${i}`, value: i }));
+
+  const minuteOptions = Array.from({length: 60}, (_, i) => ({ label: `${i}`, value: i }));
   
   useEffect(() => {
     const saved = localStorage.getItem(APP_STORAGE_KEY);
@@ -101,21 +123,14 @@ function App() {
     }
   }, [noteDraft, view]);
 
-  // Calculate current BaZi for display (Object instead of string)
+  // Calculate current BaZi for display (Driven by Wheel Inputs)
   const currentBaZi = useMemo(() => {
       try {
-          return calculateBaZi({
-             ...initialInput,
-             year: currentTime.getFullYear(),
-             month: currentTime.getMonth() + 1,
-             day: currentTime.getDate(),
-             hour: currentTime.getHours(),
-             minute: currentTime.getMinutes()
-          });
+          return calculateBaZi(input);
       } catch (e) {
           return null;
       }
-  }, [currentTime]);
+  }, [input]);
 
   const showToast = (msg: string) => {
       setToastMsg(msg);
@@ -151,9 +166,87 @@ function App() {
       setPillars(initialPillars);
       setEditingId(null);
       setNoteDraft('');
+      setPasteInput('');
       setCurrentRecord(null);
       setInputMode('date');
       showToast("已重置");
+  };
+
+  const handleSmartPaste = async () => {
+      try {
+          let text = pasteInput.trim();
+          
+          if (!text) {
+              // Only read clipboard if manual input is empty
+              text = await navigator.clipboard.readText();
+              text = text ? text.trim() : '';
+              if (!text) {
+                  showToast("无内容");
+                  return;
+              }
+          }
+
+          let parsedYear, parsedMonth, parsedDay, parsedHour, parsedMinute;
+
+          // Pattern 1: Compact Number (YYYYMMDDHHmm) e.g. 194910011500
+          const compactRegex = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/;
+          const compactMatch = text.match(compactRegex);
+
+          if (compactMatch) {
+              parsedYear = parseInt(compactMatch[1], 10);
+              parsedMonth = parseInt(compactMatch[2], 10);
+              parsedDay = parseInt(compactMatch[3], 10);
+              parsedHour = parseInt(compactMatch[4], 10);
+              parsedMinute = parseInt(compactMatch[5], 10);
+          } else {
+              // Pattern 2: Flexible Text e.g. 2025年12月8日23:57 or 2025/12/08 23:57
+              // Extract all number sequences
+              const nums = text.match(/\d+/g);
+              if (nums && nums.length >= 3) {
+                  parsedYear = parseInt(nums[0], 10);
+                  // Basic validation to check if first number is Year (e.g. > 1900)
+                  if (parsedYear < 1000) { 
+                      // If first number is small, maybe format is DD/MM/YYYY? 
+                      // For simplicity, assume standard Chinese/ISO order YMD
+                  }
+
+                  parsedMonth = parseInt(nums[1], 10);
+                  parsedDay = parseInt(nums[2], 10);
+                  parsedHour = nums.length > 3 ? parseInt(nums[3], 10) : 12; // Default to noon
+                  parsedMinute = nums.length > 4 ? parseInt(nums[4], 10) : 0;
+              } else {
+                  showToast("未能识别日期格式");
+                  return;
+              }
+          }
+
+          // Validate ranges
+          if (parsedYear && parsedMonth >= 1 && parsedMonth <= 12 && parsedDay >= 1 && parsedDay <= 31) {
+              setInput({
+                  ...input,
+                  calendarType: CalendarType.SOLAR, // Auto-detect usually implies Solar
+                  year: parsedYear,
+                  month: parsedMonth,
+                  day: parsedDay,
+                  hour: Math.min(23, Math.max(0, parsedHour || 0)),
+                  minute: Math.min(59, Math.max(0, parsedMinute || 0))
+              });
+              setPasteInput(''); // Clear input after successful parse
+              showToast("识别成功: " + parsedYear + "年" + parsedMonth + "月");
+          } else {
+              showToast("日期数值超出范围");
+          }
+
+      } catch (err) {
+          console.error(err);
+          // Fallback prompt if clipboard API fails
+          const manualInput = window.prompt("请粘贴日期 (如 194910011500 或 2025年1月1日 12:00)");
+          if (manualInput) {
+             setPasteInput(manualInput);
+             // Let the user click recognize again or recursively call? 
+             // Simplest: just put it in the box
+          }
+      }
   };
 
   const handleArrange = (e: React.FormEvent) => {
@@ -250,10 +343,12 @@ function App() {
 
   const loadRecord = (rec: Record) => {
     setCurrentRecord(rec);
-    setEditingId(rec.id); // Set to edit mode
     setNoteDraft(rec.notes);
-    const [y,m,d] = rec.birthDate.split('-').map(Number);
-    const [h,min] = rec.birthTime.split(':').map(Number);
+    
+    // Populate form inputs so going back shows the record details
+    const [y, m, d] = rec.birthDate.split('-').map(Number);
+    const [h, min] = rec.birthTime.split(':').map(Number);
+    
     setInput({
       ...input,
       name: rec.name,
@@ -263,8 +358,35 @@ function App() {
       selectedCityKey: rec.city || '不参考出生地 (北京时间)',
       group: rec.group === '默认分组' ? '' : (rec.group || '')
     });
-    setHistoryOpen(false); // Close drawer on selection
+
+    // Important: Do NOT set editingId for simple viewing.
+    // This ensures that "Back" -> "Arrange" creates a new copy or just views inputs,
+    // rather than updating the historical record.
+    setEditingId(null); 
+    
     setView('chart');
+    setHistoryOpen(false);
+  };
+  
+  const handleEditRecord = (rec: Record) => {
+    setEditingId(rec.id);
+    setNoteDraft(rec.notes);
+    const [y,m,d] = rec.birthDate.split('-').map(Number);
+    const [h,min] = rec.birthTime.split(':').map(Number);
+    
+    setInput({
+      ...input,
+      name: rec.name,
+      gender: rec.gender,
+      year: y, month: m, day: d, hour: h, minute: min,
+      calendarType: rec.calendarType || CalendarType.SOLAR,
+      selectedCityKey: rec.city || '不参考出生地 (北京时间)',
+      group: rec.group === '默认分组' ? '' : (rec.group || '')
+    });
+    
+    setView('form');
+    setHistoryOpen(false);
+    showToast("已加载档案，请修改后排盘");
   };
 
   const deleteRecord = (id: string) => {
@@ -428,43 +550,20 @@ function App() {
       return ZHI.filter((_, idx) => (idx % 2 === 0) === isYang);
   };
 
-  const lunarTimeOptions = useMemo(() => {
-    if (input.processEarlyLateRat) {
-        return LUNAR_TIMES;
-    }
-    return LUNAR_TIMES.filter(t => t.value !== 23).map(t => 
-        t.value === 0 ? { ...t, name: '子时 (23:00-01:00)' } : t
-    );
-  }, [input.processEarlyLateRat]);
-
-
   const renderInputGroup = (content: React.ReactNode) => (
     <div className="mb-4 px-2">
        {content}
     </div>
   );
-
-  const getMonthOptions = () => {
-      if (input.calendarType === CalendarType.LUNAR) {
-          return LUNAR_MONTHS.map((m, idx) => <option key={idx} value={idx + 1}>{m}</option>);
-      }
-      return Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}</option>);
-  };
-  const getDayOptions = () => {
-      if (input.calendarType === CalendarType.LUNAR) {
-          return LUNAR_DAYS.map((d, idx) => <option key={idx} value={idx + 1}>{d}</option>);
-      }
-      return Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>);
-  };
   
   // Helpers for 1:1 Display
   const getDisplayData = () => {
     if (!currentBaZi) return null;
-    const year = currentTime.getFullYear();
-    const month = String(currentTime.getMonth() + 1).padStart(2, '0');
-    const day = String(currentTime.getDate()).padStart(2, '0');
-    const hour = String(currentTime.getHours()).padStart(2, '0');
-    const minute = String(currentTime.getMinutes()).padStart(2, '0');
+    const year = input.year; // Use input directly
+    const month = String(input.month).padStart(2, '0');
+    const day = String(input.day).padStart(2, '0');
+    const hour = String(input.hour).padStart(2, '0');
+    const minute = String(input.minute).padStart(2, '0');
     
     // Format Lunar: "2025年十月十七 酉时"
     const lunarParts = currentBaZi.lunarDateStr.replace('农历', '').split('年');
@@ -489,9 +588,7 @@ function App() {
       <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
-        <button onClick={handleReset} className="absolute right-0 top-1/2 -translate-y-1/2 text-[#a89f91] hover:text-[#8B0000] p-2 transition-colors" title="重置/新排盘">
-            <RotateCcw size={18} />
-        </button>
+        {/* Removed RotateCcw button */}
       </div>
 
       <form onSubmit={handleArrange} className="relative mt-2 flex flex-col flex-1">
@@ -542,58 +639,62 @@ function App() {
 
         <div className="px-2 mb-4">
             {inputMode === 'date' ? (
-                <div className="space-y-6">
-                     <div className={`grid ${input.calendarType === CalendarType.LUNAR ? 'grid-cols-4' : 'grid-cols-5'} gap-2 text-center`}>
-                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
-                             <select value={input.year} onChange={(e) => setInput({...input, year:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
-                             </select>
-                             <span className="text-xs text-[#5c4033] ml-0.5">年</span>
-                         </div>
-                         
-                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
-                             <select value={input.month} onChange={(e) => setInput({...input, month:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                 {getMonthOptions()}
-                             </select>
-                             {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">月</span>}
-                         </div>
+                <div className="space-y-2">
+                     {/* Smart Recognition Bar */}
+                     <div className="flex justify-between items-center px-2 mb-2 gap-2">
+                         <input 
+                             value={pasteInput}
+                             onChange={(e) => setPasteInput(e.target.value)}
+                             placeholder="格式：194910011500"
+                             className="flex-1 bg-transparent border-b border-[#d6cda4] text-[10px] text-[#5c4033] placeholder-[#d6cda4] outline-none py-1"
+                         />
+                         <button 
+                            type="button"
+                            onClick={handleSmartPaste}
+                            className="flex items-center gap-1 text-[10px] text-[#8B0000] bg-[#eaddcf]/40 hover:bg-[#eaddcf] px-2 py-1 rounded-full transition-colors whitespace-nowrap"
+                         >
+                            <FileText size={12} /> 识别日期
+                         </button>
+                     </div>
 
-                         <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
-                             <select value={input.day} onChange={(e) => setInput({...input, day:Number(e.target.value)})}
-                                 className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                 {getDayOptions()}
-                             </select>
-                             {input.calendarType === CalendarType.SOLAR && <span className="text-xs text-[#5c4033] ml-0.5">日</span>}
-                         </div>
-
-                         {input.calendarType === CalendarType.LUNAR ? (
-                            <div className="flex flex-row items-center justify-center col-span-1 border-b border-[#d6cda4] pb-1">
-                                <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                    className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                    {lunarTimeOptions.map((t) => (
-                                        <option key={t.value} value={t.value}>{t.name.split(' ')[0]}</option>
-                                    ))}
-                                </select>
-                            </div>
-                         ) : (
-                            <>
-                                <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
-                                     <select value={input.hour} onChange={(e) => setInput({...input, hour:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                         {hours.map(h => <option key={h} value={h}>{h}</option>)}
-                                     </select>
-                                     <span className="text-xs text-[#5c4033] ml-0.5">时</span>
-                                </div>
-                                <div className="flex flex-row items-center justify-center border-b border-[#d6cda4] pb-1">
-                                     <select value={input.minute} onChange={(e) => setInput({...input, minute:Number(e.target.value)})}
-                                         className="bg-transparent text-[#450a0a] font-bold text-base text-center appearance-none outline-none w-auto">
-                                         {minutes.map(m => <option key={m} value={m}>{m}</option>)}
-                                     </select>
-                                     <span className="text-xs text-[#5c4033] ml-0.5">分</span>
-                                </div>
-                            </>
+                     {/* New Wheel Picker Interface - Removed Border & Background */}
+                     <div className="flex items-center justify-between">
+                         <WheelPicker 
+                             options={yearOptions} 
+                             value={input.year} 
+                             onChange={(v) => setInput({ ...input, year: Number(v) })} 
+                             label="年"
+                             className="flex-1"
+                         />
+                         <WheelPicker 
+                             options={monthOptions} 
+                             value={input.month} 
+                             onChange={(v) => setInput({ ...input, month: Number(v) })} 
+                             label={input.calendarType === CalendarType.SOLAR ? "月" : ""}
+                             className="flex-1"
+                         />
+                         <WheelPicker 
+                             options={dayOptions} 
+                             value={input.day} 
+                             onChange={(v) => setInput({ ...input, day: Number(v) })} 
+                             label={input.calendarType === CalendarType.SOLAR ? "日" : ""}
+                             className="flex-1"
+                         />
+                         <WheelPicker 
+                             options={hourOptions} 
+                             value={input.hour} 
+                             onChange={(v) => setInput({ ...input, hour: Number(v) })} 
+                             label={input.calendarType === CalendarType.SOLAR ? "时" : ""}
+                             className="flex-1"
+                         />
+                         {input.calendarType === CalendarType.SOLAR && (
+                             <WheelPicker 
+                                 options={minuteOptions} 
+                                 value={input.minute} 
+                                 onChange={(v) => setInput({ ...input, minute: Number(v) })} 
+                                 label="分"
+                                 className="flex-1"
+                             />
                          )}
                      </div>
                      
@@ -605,8 +706,8 @@ function App() {
                                  <div className="flex gap-5 pl-1">
                                      {[currentBaZi.year, currentBaZi.month, currentBaZi.day, currentBaZi.hour].map((p, i) => (
                                          <div key={i} className="flex flex-col items-center gap-1">
-                                             <span className="text-xl font-light text-stone-600 leading-none">{p.stem}</span>
-                                             <span className="text-xl font-light text-stone-600 leading-none">{p.branch}</span>
+                                             <span className={`text-xl font-light leading-none ${ELEMENT_COLORS[p.stemElement]}`}>{p.stem}</span>
+                                             <span className={`text-xl font-light leading-none ${ELEMENT_COLORS[p.branchElement]}`}>{p.branch}</span>
                                          </div>
                                      ))}
                                  </div>
@@ -1024,6 +1125,7 @@ function App() {
         onClose={() => setHistoryOpen(false)} 
         records={records}
         onSelect={loadRecord}
+        onEdit={handleEditRecord}
         onDelete={deleteRecord}
         onImport={handleRestoreClick}
         onBackup={handleBackup}

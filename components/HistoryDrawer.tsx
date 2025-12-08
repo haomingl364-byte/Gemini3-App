@@ -1,25 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { Record } from '../types';
-import { X, Clock, Trash2, Search, Folder, ChevronRight, Download, Upload, MapPin } from 'lucide-react';
-import { pinyin } from 'pinyin-pro';
+import { X, Clock, Trash2, Search, Folder, ChevronRight, Download, Upload, MapPin, Edit3 } from 'lucide-react';
 
 interface HistoryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   records: Record[];
   onSelect: (record: Record) => void;
+  onEdit: (record: Record) => void; 
   onDelete: (id: string) => void;
-  onImport: () => void; // Trigger file input
-  onBackup: () => void; // Trigger export
+  onImport: () => void;
+  onBackup: (e: React.MouseEvent) => void;
 }
 
-// Simple alphabet array
-const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-
-export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, records, onSelect, onDelete, onImport, onBackup }) => {
+export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, records, onSelect, onEdit, onDelete, onImport, onBackup }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('全部');
-  const [selectedPinyin, setSelectedPinyin] = useState<string>(''); // For sidebar index
 
   // Compute unique groups from records
   const groups = useMemo(() => {
@@ -27,73 +23,37 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
     return ['全部', ...Array.from(uniqueGroups).sort()];
   }, [records]);
 
-  // Compute records with pinyin initials for faster indexing
-  const indexedRecords = useMemo(() => {
-    return records.map(rec => {
-        const firstChar = rec.name.charAt(0);
-        let pyInitial = '#';
-        if (firstChar) {
-             const py = pinyin(firstChar, { pattern: 'first', toneType: 'none' });
-             if (py && /^[a-zA-Z]/.test(py)) {
-                 pyInitial = py.toUpperCase();
-             }
-        }
-        return { ...rec, pyInitial };
-    });
-  }, [records]);
-
-  // Filter records based on search, group, and pinyin index
+  // Filter records based on search and group
   const filteredRecords = useMemo(() => {
-    return indexedRecords.filter(rec => {
-      // 1. Pinyin Index Filter
-      if (selectedPinyin && rec.pyInitial !== selectedPinyin) {
-          return false;
-      }
-
-      // 2. Search Filter (Deep Search: Name, Group, GanZhi)
-      const term = searchTerm.toLowerCase();
+    return records.filter(rec => {
+      // Search Filter (Split by space for multi-term search)
+      const rawTerm = searchTerm.trim().toLowerCase();
       const recGroup = rec.group || '默认分组';
       
-      let matchesSearch = false;
-      if (!term) {
-          matchesSearch = true;
-      } else {
-          // Check Name & Group
-          if (rec.name.toLowerCase().includes(term) || recGroup.toLowerCase().includes(term)) {
-              matchesSearch = true;
-          } else {
-              // Check Chart Pillars (GanZhi)
-              // Construct a string like "甲子乙丑..."
-              const chartStr = `
-                ${rec.chart.year.stem}${rec.chart.year.branch}
-                ${rec.chart.month.stem}${rec.chart.month.branch}
-                ${rec.chart.day.stem}${rec.chart.day.branch}
-                ${rec.chart.hour.stem}${rec.chart.hour.branch}
-              `;
-              if (chartStr.includes(term)) {
-                  matchesSearch = true;
-              }
-          }
+      let matchesSearch = true;
+      if (rawTerm) {
+          const terms = rawTerm.split(/\s+/); // Split by whitespace
+          
+          // Construct searchable string
+          const chartStr = `
+            ${rec.chart.year.stem}${rec.chart.year.branch}
+            ${rec.chart.month.stem}${rec.chart.month.branch}
+            ${rec.chart.day.stem}${rec.chart.day.branch}
+            ${rec.chart.hour.stem}${rec.chart.hour.branch}
+          `.replace(/\s+/g, ''); 
+          
+          const fullSearchText = `${rec.name.toLowerCase()} ${recGroup.toLowerCase()} ${chartStr}`;
+          
+          // Check if ALL terms are present
+          matchesSearch = terms.every(t => fullSearchText.includes(t));
       }
 
-      // 3. Group Filter
+      // Group Filter
       const matchesGroup = selectedGroup === '全部' || recGroup === selectedGroup;
       
       return matchesSearch && matchesGroup;
     });
-  }, [indexedRecords, searchTerm, selectedGroup, selectedPinyin]);
-
-  const handlePinyinSelect = (letter: string) => {
-      // Toggle off if clicking same letter, else select it
-      if (selectedPinyin === letter) {
-          setSelectedPinyin('');
-      } else {
-          setSelectedPinyin(letter);
-          // Also clear group/search to avoid confusion? Or keep combined?
-          // Let's keep combined for power users, but maybe clear group is safer
-          // setSelectedGroup('全部');
-      }
-  };
+  }, [records, searchTerm, selectedGroup]);
 
   if (!isOpen) return null;
 
@@ -122,7 +82,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a89f91]" size={14} />
                 <input 
                     type="text" 
-                    placeholder="搜索姓名、分组或八字(如甲子)..." 
+                    placeholder="搜姓名 或八字(如:甲子 丙寅)..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full bg-white border border-[#d6cda4] rounded-full py-2 pl-9 pr-4 text-sm text-[#450a0a] focus:border-[#8B0000] focus:ring-1 focus:ring-[#8B0000]/20 outline-none placeholder-[#d6cda4] transition-all"
@@ -147,7 +107,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
             </div>
         </div>
 
-        {/* Main Content Area with Sidebar */}
+        {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden relative">
             
             {/* Records List */}
@@ -165,25 +125,35 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                     className="bg-white border border-[#e5e0d0] rounded-lg shadow-sm p-3 active:scale-[0.98] active:bg-[#fff8ea] transition-all relative group cursor-pointer hover:shadow-md hover:border-[#d6cda4]"
                   >
                     {/* Top Row: Name, Gender & Group Badge */}
-                    <div className="flex justify-between items-start mb-2">
+                    <div className="flex justify-between items-start mb-2 pr-12"> {/* pr-12 to make room for actions */}
                         <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-base font-bold text-[#450a0a]">{rec.name}</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border ${rec.gender === '乾造' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-pink-50 text-pink-700 border-pink-100'}`}>
                                 {rec.gender}
                             </span>
-                            {/* Group Badge Moved Here */}
                             {(rec.group && rec.group !== '默认分组') && (
                                 <span className="text-[10px] text-[#8B0000] bg-[#fff8ea] px-1.5 py-0.5 rounded border border-[#eaddcf] font-bold">
                                     {rec.group}
                                 </span>
                             )}
                         </div>
-                        {/* Delete Button (visible on hover or always on mobile) */}
+                    </div>
+
+                    {/* Action Buttons (Edit & Delete) - Positioned Top Right */}
+                    <div className="absolute top-3 right-3 flex gap-2">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onEdit(rec); onClose(); }}
+                            className="text-[#a89f91] hover:text-[#8B0000] p-1.5 rounded-full hover:bg-[#eaddcf] transition-colors"
+                            title="编辑案例"
+                        >
+                            <Edit3 size={15} />
+                        </button>
                         <button 
                             onClick={(e) => { e.stopPropagation(); onDelete(rec.id); }}
                             className="text-[#a89f91] hover:text-red-600 p-1.5 rounded-full hover:bg-red-50 transition-colors"
+                            title="删除案例"
                         >
-                            <Trash2 size={14} />
+                            <Trash2 size={15} />
                         </button>
                     </div>
 
@@ -193,7 +163,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                             <span className="w-1 h-1 rounded-full bg-[#d6cda4]"></span>
                             {rec.birthDate} {rec.birthTime}
                         </div>
-                        {/* BaZi Row - Now 4 pillars, space separated, no units */}
+                        {/* BaZi Row */}
                         <div className="flex items-center gap-2 text-sm text-[#450a0a] font-serif font-medium mt-1 pl-2 border-l-2 border-[#d6cda4]/50">
                              <span>{rec.chart.year.stem}{rec.chart.year.branch}</span>
                              <span>{rec.chart.month.stem}{rec.chart.month.branch}</span>
@@ -202,28 +172,15 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                         </div>
                     </div>
 
-                    <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-[#d6cda4]/50 group-hover:text-[#d6cda4] transition-colors" size={20} />
+                    <ChevronRight className="absolute right-2 bottom-3 text-[#d6cda4]/50 group-hover:text-[#d6cda4] transition-colors" size={16} />
                   </div>
                 ))
               )}
             </div>
 
-            {/* Pinyin Index Sidebar */}
-            <div className="w-6 bg-[#fffcf5] border-l border-[#ebe5ce] flex flex-col items-center justify-center py-2 text-[10px] font-bold text-[#a89f91] select-none shrink-0 z-10">
-                {ALPHABET.map(letter => (
-                    <button
-                        key={letter}
-                        onClick={() => handlePinyinSelect(letter)}
-                        className={`w-full py-0.5 text-center hover:text-[#8B0000] transition-colors ${selectedPinyin === letter ? 'text-[#8B0000] bg-[#eaddcf]' : ''}`}
-                    >
-                        {letter}
-                    </button>
-                ))}
-            </div>
-
         </div>
         
-        {/* Footer Actions (Backup/Restore) */}
+        {/* Footer Actions */}
         <div className="p-3 border-t border-[#d6cda4] bg-[#fffcf5] flex gap-2 shrink-0">
             <button 
                 onClick={onBackup}
