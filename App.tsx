@@ -824,7 +824,20 @@ function App() {
                          </div>
                     </div>
                     
-                    <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary" className="text-xs py-2 mt-4 bg-[#eaddcf]/50 border-none shadow-none text-[#5c4033] hover:text-[#8B0000]">
+                    <div className="flex justify-end mt-2 px-1">
+                        <label className="flex items-center gap-2 cursor-pointer group select-none">
+                            <span className="text-[11px] text-[#5c4033] group-hover:text-[#8B0000] transition-colors">保存案例</span>
+                            <div className={`w-3 h-3 border rounded-sm flex items-center justify-center transition-colors ${input.autoSave ? 'bg-[#8B0000] border-[#8B0000]' : 'border-[#a89f91]'}`}>
+                                {input.autoSave && <Check size={8} className="text-white" />}
+                            </div>
+                            <input type="checkbox" className="hidden" 
+                                checked={input.autoSave} 
+                                onChange={(e) => setInput({...input, autoSave: e.target.checked})} 
+                            />
+                        </label>
+                    </div>
+
+                    <Button type="button" onClick={handleSearchDates} isLoading={isSearching} variant="secondary" className="text-xs py-2 mt-2 bg-[#eaddcf]/50 border-none shadow-none text-[#5c4033] hover:text-[#8B0000]">
                         <Search size={14} className="mr-2" /> 查询匹配日期
                     </Button>
                     
