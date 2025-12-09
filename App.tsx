@@ -595,7 +595,7 @@ function App() {
         .sort();
     
     return (
-    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[env(safe-area-inset-top)] font-sans bg-[#fff8ea]">
+    <div className="flex flex-col min-h-screen max-w-md mx-auto px-4 pt-[max(0.5rem,env(safe-area-inset-top))] font-sans bg-[#fff8ea]">
       <div className="text-center mb-4 pt-4 relative">
         <h1 className="text-3xl font-calligraphy text-[#8B0000] mb-0 drop-shadow-sm">玄青君八字</h1>
         <p className="text-[#5c4033] text-[9px] uppercase tracking-[0.3em] opacity-70">SIZHUBAZI</p>
