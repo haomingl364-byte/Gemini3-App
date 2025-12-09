@@ -111,7 +111,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
         <div className="flex flex-1 overflow-hidden relative">
             
             {/* Records List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-[#fdfbf6]">
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-[#fdfbf6] overscroll-contain">
               {filteredRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 text-[#a89f91] space-y-2">
                     <Search size={32} opacity={0.2} />

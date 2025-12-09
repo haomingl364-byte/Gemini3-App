@@ -981,7 +981,7 @@ function App() {
            </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 overflow-y-auto p-2 overscroll-contain">
             
             <div className="space-y-1 text-[15px] leading-tight text-[#333]">
                 <div>出生时间：{chart.solarDateStr}</div>
@@ -1050,7 +1050,7 @@ function App() {
                 <div className="text-[#333]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">{currentDaYunStr}</span></div>
             </div>
 
-            <div className="mt-1 overflow-x-auto touch-pan-x">
+            <div className="mt-1 overflow-x-auto">
                 <div className="min-w-max">
                      <div className="flex">
                          <div className="flex flex-col w-12 items-center shrink-0">
@@ -1066,7 +1066,7 @@ function App() {
                                         <div className="h-4 text-[15px] text-[#333]">1</div>
                                         <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         
-                                        <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
+                                        <div className="mt-2 flex flex-col items-center gap-1">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
                                                 const textColor = isCurrentYunQian 
@@ -1102,7 +1102,7 @@ function App() {
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
                                  <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
-                                 <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
+                                 <div className="mt-2 flex flex-col items-center gap-1">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
