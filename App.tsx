@@ -83,6 +83,14 @@ function App() {
   // Textarea Ref for auto-grow
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Refs for Custom Horizontal Scroll (Da Yun)
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+  const touchState = useRef({
+      isDragging: false,
+      startX: 0,
+      startScrollLeft: 0
+  });
+
   const years = Array.from({length: 150}, (_, i) => 1900 + i);
   // Generate Wheel Options
   const yearOptions = years.map(y => ({ label: `${y}`, value: y }));
@@ -968,6 +976,28 @@ function App() {
     const { chart } = currentRecord;
     const currentYear = new Date().getFullYear();
 
+    // Custom Scroll Logic for Da Yun (Top Part)
+    const handleDaYunTouchStart = (e: React.TouchEvent) => {
+        if (!chartScrollRef.current) return;
+        touchState.current.isDragging = true;
+        touchState.current.startX = e.touches[0].pageX;
+        touchState.current.startScrollLeft = chartScrollRef.current.scrollLeft;
+    };
+
+    const handleDaYunTouchMove = (e: React.TouchEvent) => {
+        if (!touchState.current.isDragging || !chartScrollRef.current) return;
+        const currentX = e.touches[0].pageX;
+        // Calculate distance moved. 
+        // dragging left (currentX < startX) -> move content left (increase scrollLeft)
+        // We subtract the delta (current - start) from the initial scroll position.
+        const delta = currentX - touchState.current.startX;
+        chartScrollRef.current.scrollLeft = touchState.current.startScrollLeft - delta;
+    };
+
+    const handleDaYunTouchEnd = () => {
+        touchState.current.isDragging = false;
+    };
+
     let currentDaYunStr = "运前";
     if (chart.daYun.length > 0) {
         if (currentYear < chart.daYun[0].startYear) {
@@ -1077,8 +1107,11 @@ function App() {
             </div>
 
             {/* SCROLL BEHAVIOR MODIFICATION */}
-            {/* Horizontal Scroll Container */}
-            <div className="mt-1 overflow-x-auto"> {/* Removed touch-pan-x to allow default behavior overrides */}
+            {/* Horizontal Scroll Container - OVERFLOW HIDDEN to disable native horizontal scroll everywhere */}
+            <div 
+                ref={chartScrollRef}
+                className="mt-1 overflow-x-hidden whitespace-nowrap"
+            >
                 <div className="min-w-max">
                      <div className="flex">
                          <div className="flex flex-col w-12 items-center shrink-0">
@@ -1090,15 +1123,20 @@ function App() {
                                  
                                  return (
                                      <>
-                                        {/* DaYun Top Part - Allows Horizontal Scroll */}
-                                        <div className="w-full touch-pan-x flex flex-col items-center" style={{ touchAction: 'pan-x' }}>
+                                        {/* DaYun Top Part - BIND TOUCH EVENTS HERE FOR SCROLL */}
+                                        <div 
+                                            className="w-full flex flex-col items-center cursor-grab active:cursor-grabbing"
+                                            onTouchStart={handleDaYunTouchStart}
+                                            onTouchMove={handleDaYunTouchMove}
+                                            onTouchEnd={handleDaYunTouchEnd}
+                                        >
                                             <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
                                             <div className="h-4 text-[15px] text-[#333]">1</div>
                                             <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         </div>
                                         
-                                        {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
-                                        <div className="mt-2 w-full flex flex-col items-center gap-1 touch-pan-y select-none" style={{ touchAction: 'pan-y' }}>
+                                        {/* LiuNian Bottom Part - NO TOUCH EVENTS (Default Page Scroll) */}
+                                        <div className="mt-2 w-full flex flex-col items-center gap-1 select-none">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
                                                 const textColor = isCurrentYunQian 
@@ -1106,7 +1144,7 @@ function App() {
                                                     : 'text-[#333]';
                                                 
                                                 return (
-                                                    <div key={idx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`} style={{ touchAction: 'pan-y' }}>
+                                                    <div key={idx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`}>
                                                         <span className="text-[15px] tracking-widest">{yn.ganZhi}</span>
                                                     </div>
                                                 );
@@ -1124,8 +1162,13 @@ function App() {
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 {/* DaYun Top Part - Allows Horizontal Scroll */}
-                                 <div className="w-full touch-pan-x flex flex-col items-center" style={{ touchAction: 'pan-x' }}>
+                                 {/* DaYun Top Part - BIND TOUCH EVENTS HERE FOR SCROLL */}
+                                 <div 
+                                    className="w-full flex flex-col items-center cursor-grab active:cursor-grabbing"
+                                    onTouchStart={handleDaYunTouchStart}
+                                    onTouchMove={handleDaYunTouchMove}
+                                    onTouchEnd={handleDaYunTouchEnd}
+                                 >
                                     <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                     <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
                                     
@@ -1137,15 +1180,15 @@ function App() {
                                     <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
                                  </div>
 
-                                 {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
-                                 <div className="mt-2 w-full flex flex-col items-center gap-1 touch-pan-y select-none" style={{ touchAction: 'pan-y' }}>
+                                 {/* LiuNian Bottom Part - NO TOUCH EVENTS (Default Page Scroll) */}
+                                 <div className="mt-2 w-full flex flex-col items-center gap-1 select-none">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
                                          const textColor = isCurrentLiuNian ? `${highlightColor} font-bold` : baseColor;
                                          
                                          return (
-                                            <div key={lnIdx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`} style={{ touchAction: 'pan-y' }}>
+                                            <div key={lnIdx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`}>
                                                 <span className="text-[15px] tracking-widest">{ln.ganZhi}</span>
                                             </div>
                                          );
