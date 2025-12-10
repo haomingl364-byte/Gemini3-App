@@ -336,6 +336,32 @@ function App() {
     showToast("保存成功");
   };
 
+  // Group Management Handlers
+  const handleRenameGroup = (oldName: string, newName: string) => {
+    if (!oldName || !newName || oldName === newName) return;
+    const newRecords = records.map(r => {
+        if ((r.group || '默认分组') === oldName) {
+            return { ...r, group: newName };
+        }
+        return r;
+    });
+    saveRecordsToStorage(newRecords);
+    showToast(`分组已重命名为: ${newName}`);
+  };
+
+  const handleDeleteGroup = (groupName: string) => {
+    // Logic: Move items in this group to '默认分组' or empty string
+    // Confirm via JS native alert/confirm is fine or rely on UI in Drawer
+    const newRecords = records.map(r => {
+        if ((r.group || '默认分组') === groupName) {
+            return { ...r, group: '' }; // Reset to default
+        }
+        return r;
+    });
+    saveRecordsToStorage(newRecords);
+    showToast(`分组“${groupName}”已删除`);
+  };
+
   const handleAIAnalyze = async () => {
     if (!currentRecord) return;
     setIsAnalyzing(true);
@@ -1050,7 +1076,9 @@ function App() {
                 <div className="text-[#333]">即每逢乙年清明后第7日交脱大运, 当前: <span className="text-[#8B0000] font-bold">{currentDaYunStr}</span></div>
             </div>
 
-            <div className="mt-1 overflow-x-auto">
+            {/* SCROLL BEHAVIOR MODIFICATION */}
+            {/* Horizontal Scroll Container */}
+            <div className="mt-1 overflow-x-auto touch-pan-x">
                 <div className="min-w-max">
                      <div className="flex">
                          <div className="flex flex-col w-12 items-center shrink-0">
@@ -1062,11 +1090,15 @@ function App() {
                                  
                                  return (
                                      <>
-                                        <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
-                                        <div className="h-4 text-[15px] text-[#333]">1</div>
-                                        <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
+                                        {/* DaYun Top Part - Allows Horizontal Scroll */}
+                                        <div className="touch-pan-x flex flex-col items-center">
+                                            <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
+                                            <div className="h-4 text-[15px] text-[#333]">1</div>
+                                            <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
+                                        </div>
                                         
-                                        <div className="mt-2 flex flex-col items-center gap-1">
+                                        {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
+                                        <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
                                                 const textColor = isCurrentYunQian 
@@ -1092,17 +1124,21 @@ function App() {
                              
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
-                                 <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
-                                 <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
-                                 
-                                 <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? highlightColor : 'text-[#1c1917]'} font-bold`}>
-                                     <span className="text-lg tracking-wide">{yun.ganZhi}</span> 
+                                 {/* DaYun Top Part - Allows Horizontal Scroll */}
+                                 <div className="touch-pan-x flex flex-col items-center">
+                                    <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
+                                    <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
+                                    
+                                    <div className={`h-8 flex items-center justify-center ${isCurrentDaYun ? highlightColor : 'text-[#1c1917]'} font-bold`}>
+                                        <span className="text-lg tracking-wide">{yun.ganZhi}</span> 
+                                    </div>
+                                    
+                                    <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
+                                    <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
                                  </div>
-                                 
-                                 <div className="h-4 text-[15px] text-[#333]">{yun.startAge}</div>
-                                 <div className="h-4 text-[15px] text-[#333]">{yun.startYear}</div>
 
-                                 <div className="mt-2 flex flex-col items-center gap-1">
+                                 {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
+                                 <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
@@ -1169,6 +1205,8 @@ function App() {
         onDelete={deleteRecord}
         onImport={handleRestoreClick}
         onBackup={handleBackup}
+        onUpdateGroup={handleRenameGroup}
+        onDeleteGroup={handleDeleteGroup}
       />
       
       {showSettings && (

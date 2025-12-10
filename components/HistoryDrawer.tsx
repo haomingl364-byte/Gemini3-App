@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Record } from '../types';
-import { X, Clock, Trash2, Search, Folder, ChevronRight, Download, Upload, MapPin, Edit3 } from 'lucide-react';
+import { X, Clock, Trash2, Search, Folder, ChevronRight, Download, Upload, MapPin, Edit3, AlertCircle } from 'lucide-react';
 
 interface HistoryDrawerProps {
   isOpen: boolean;
@@ -11,11 +11,21 @@ interface HistoryDrawerProps {
   onDelete: (id: string) => void;
   onImport: () => void;
   onBackup: (e: React.MouseEvent) => void;
+  onUpdateGroup?: (oldName: string, newName: string) => void;
+  onDeleteGroup?: (groupName: string) => void;
 }
 
-export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, records, onSelect, onEdit, onDelete, onImport, onBackup }) => {
+export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ 
+    isOpen, onClose, records, onSelect, onEdit, onDelete, onImport, onBackup,
+    onUpdateGroup, onDeleteGroup
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('全部');
+
+  // Group Management State
+  const [editingGroup, setEditingGroup] = useState<{original: string, current: string} | null>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressTriggered = useRef(false);
 
   // Compute unique groups from records
   const groups = useMemo(() => {
@@ -54,6 +64,46 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
       return matchesSearch && matchesGroup;
     });
   }, [records, searchTerm, selectedGroup]);
+
+  // Touch Interactions for Group Pills
+  const handleTouchStart = (group: string) => {
+      if (group === '全部' || group === '默认分组') return; // Cannot edit system groups
+      
+      isLongPressTriggered.current = false;
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      
+      pressTimer.current = setTimeout(() => {
+          isLongPressTriggered.current = true;
+          setEditingGroup({ original: group, current: group });
+          // Optional: Haptic feedback
+          if (navigator.vibrate) navigator.vibrate(50);
+      }, 600);
+  };
+
+  const handleTouchEnd = (group: string) => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      // Only select if it wasn't a long press
+      if (!isLongPressTriggered.current) {
+          setSelectedGroup(group);
+      }
+  };
+
+  const saveGroupEdit = () => {
+      if (!editingGroup || !onUpdateGroup) return;
+      if (editingGroup.current.trim() && editingGroup.current !== editingGroup.original) {
+          onUpdateGroup(editingGroup.original, editingGroup.current.trim());
+      }
+      setEditingGroup(null);
+  };
+
+  const deleteGroupAction = () => {
+      if (!editingGroup || !onDeleteGroup) return;
+      if (confirm(`确定要删除分组 "${editingGroup.original}" 吗？\n组内案例将移至默认分组。`)) {
+          onDeleteGroup(editingGroup.original);
+          setEditingGroup(null);
+          setSelectedGroup('全部');
+      }
+  };
 
   if (!isOpen) return null;
 
@@ -94,8 +144,14 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                 {groups.map(group => (
                     <button
                         key={group}
-                        onClick={() => setSelectedGroup(group)}
-                        className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all border shadow-sm ${
+                        // Touch / Mouse Events for Long Press
+                        onTouchStart={() => handleTouchStart(group)}
+                        onTouchEnd={() => handleTouchEnd(group)}
+                        onMouseDown={() => handleTouchStart(group)}
+                        onMouseUp={() => handleTouchEnd(group)}
+                        onMouseLeave={() => { if(pressTimer.current) clearTimeout(pressTimer.current); }}
+                        
+                        className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all border shadow-sm select-none ${
                             selectedGroup === group 
                             ? 'bg-[#8B0000] text-[#fff8ea] border-[#8B0000]' 
                             : 'bg-white text-[#5c4033] border-[#d6cda4] hover:border-[#8B0000]/50'
@@ -104,6 +160,9 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
                         {group}
                     </button>
                 ))}
+            </div>
+            <div className="text-[9px] text-stone-400 text-center flex items-center justify-center gap-1">
+                <AlertCircle size={10} /> 长按分组可编辑或删除
             </div>
         </div>
 
@@ -200,6 +259,34 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, r
         <div className="pb-4 pt-1 text-center text-[10px] text-[#a89f91] bg-[#fffcf5] shrink-0">
             共 {records.length} 条档案
         </div>
+
+        {/* Group Edit Modal */}
+        {editingGroup && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-6 animate-fadeIn">
+                <div className="bg-white rounded-lg shadow-xl w-full border border-[#d6cda4] overflow-hidden">
+                    <div className="bg-[#fff8ea] p-3 border-b border-[#eaddcf] flex justify-between items-center">
+                        <h3 className="text-[#8B0000] font-bold text-sm">编辑分组</h3>
+                        <button onClick={() => setEditingGroup(null)}><X size={18} className="text-[#a89f91]"/></button>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <input 
+                            value={editingGroup.current}
+                            onChange={(e) => setEditingGroup({...editingGroup, current: e.target.value})}
+                            className="w-full border-b border-[#d6cda4] text-lg py-1 text-[#450a0a] outline-none placeholder-[#d6cda4]"
+                            autoFocus
+                        />
+                        <div className="flex gap-2">
+                             <button onClick={deleteGroupAction} className="flex-1 py-2 text-xs font-bold text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors">
+                                删除分组
+                             </button>
+                             <button onClick={saveGroupEdit} className="flex-[2] py-2 text-xs font-bold text-white bg-[#8B0000] rounded hover:bg-[#7a0000] transition-colors">
+                                保存修改
+                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );
