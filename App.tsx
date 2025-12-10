@@ -1078,7 +1078,7 @@ function App() {
 
             {/* SCROLL BEHAVIOR MODIFICATION */}
             {/* Horizontal Scroll Container */}
-            <div className="mt-1 overflow-x-auto touch-pan-x">
+            <div className="mt-1 overflow-x-auto"> {/* Removed touch-pan-x to allow default behavior overrides */}
                 <div className="min-w-max">
                      <div className="flex">
                          <div className="flex flex-col w-12 items-center shrink-0">
@@ -1091,14 +1091,14 @@ function App() {
                                  return (
                                      <>
                                         {/* DaYun Top Part - Allows Horizontal Scroll */}
-                                        <div className="touch-pan-x flex flex-col items-center">
+                                        <div className="w-full touch-pan-x flex flex-col items-center">
                                             <div className={`h-8 flex items-center justify-center font-bold text-lg ${isCurrentYunQian ? highlightColor : 'text-[#1c1917]'}`}>运前</div>
                                             <div className="h-4 text-[15px] text-[#333]">1</div>
                                             <div className="h-4 text-[15px] text-[#333]">{chart.yunQian[0]?.year}</div>
                                         </div>
                                         
                                         {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
-                                        <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
+                                        <div className="mt-2 w-full flex flex-col items-center gap-1 touch-pan-y">
                                             {chart.yunQian.map((yn, idx) => {
                                                 const isCurrent = yn.year === currentYear;
                                                 const textColor = isCurrentYunQian 
@@ -1106,7 +1106,7 @@ function App() {
                                                     : 'text-[#333]';
                                                 
                                                 return (
-                                                    <div key={idx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
+                                                    <div key={idx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`}>
                                                         <span className="text-[15px] tracking-widest">{yn.ganZhi}</span>
                                                     </div>
                                                 );
@@ -1125,7 +1125,7 @@ function App() {
                              return (
                              <div key={yun.index} className="flex flex-col w-12 items-center shrink-0">
                                  {/* DaYun Top Part - Allows Horizontal Scroll */}
-                                 <div className="touch-pan-x flex flex-col items-center">
+                                 <div className="w-full touch-pan-x flex flex-col items-center">
                                     <div className="h-4 text-[15px] text-[#333] scale-90 whitespace-nowrap">{yun.naYin}</div>
                                     <div className="h-4 text-[15px] text-[#333]">{yun.stemTenGod}</div>
                                     
@@ -1138,14 +1138,14 @@ function App() {
                                  </div>
 
                                  {/* LiuNian Bottom Part - Allows Vertical Scroll Only (Blocks Horizontal) */}
-                                 <div className="mt-2 flex flex-col items-center gap-1 touch-pan-y">
+                                 <div className="mt-2 w-full flex flex-col items-center gap-1 touch-pan-y">
                                      {yun.liuNian.map((ln, lnIdx) => {
                                          const isCurrentLiuNian = ln.year === currentYear;
                                          const baseColor = isCurrentDaYun ? highlightColor : 'text-[#333]';
                                          const textColor = isCurrentLiuNian ? `${highlightColor} font-bold` : baseColor;
                                          
                                          return (
-                                            <div key={lnIdx} className={`flex items-center justify-center h-[18px] ${textColor}`}>
+                                            <div key={lnIdx} className={`flex items-center justify-center h-[18px] w-full ${textColor}`}>
                                                 <span className="text-[15px] tracking-widest">{ln.ganZhi}</span>
                                             </div>
                                          );
