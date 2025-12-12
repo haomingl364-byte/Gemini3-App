@@ -1,4 +1,3 @@
-
 import { Solar, Lunar, EightChar, LunarUtil, SolarUtil, DaYun as LunarDaYun } from 'lunar-javascript';
 import { BaZiChart, Pillar, Gender, ElementType, DaYun, HiddenStem, LiuNian, CalendarType, UserInput } from '../types';
 import { STEM_ELEMENTS, BRANCH_ELEMENTS, ELEMENT_CN, CITIES, GAN, ZHI } from '../constants';
@@ -325,7 +324,8 @@ export const calculateBaZi = (input: UserInput): BaZiChart => {
   let solar: Solar;
 
   if (input.calendarType === CalendarType.LUNAR) {
-    solar = Lunar.fromYmdHms(input.year, input.month, input.day, input.hour, input.minute, 0).getSolar();
+    const lunarMonth = input.isLeapMonth ? -input.month : input.month; // Handle leap month
+    solar = Lunar.fromYmdHms(input.year, lunarMonth, input.day, input.hour, input.minute, 0).getSolar();
   } else {
     solar = Solar.fromYmdHms(input.year, input.month, input.day, input.hour, input.minute, 0);
   }

@@ -8,28 +8,30 @@ import { Button } from './components/Button';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { PillarDisplay } from './components/PillarDisplay';
 import { WheelPicker } from './components/WheelPicker';
+import { LunarYear } from 'lunar-javascript';
 
-// Initialize with current date/time
-const now = new Date();
-
-const initialInput: UserInput = {
-  name: '',
-  gender: Gender.MALE,
-  calendarType: CalendarType.SOLAR,
-  year: now.getFullYear(),
-  month: now.getMonth() + 1,
-  day: now.getDate(),
-  hour: now.getHours(),
-  minute: now.getMinutes(),
-  isLeapMonth: false,
-  selectedCityKey: '不参考出生地 (北京时间)',
-  autoSave: true,
-  group: '',
-  processEarlyLateRat: true, // Default to true (Distinguish Early/Late Rat)
-  manualYear: '甲子',
-  manualMonth: '丙寅',
-  manualDay: '戊辰',
-  manualHour: '壬子'
+// Helper to get initial input with current time
+const getInitialInput = (): UserInput => {
+  const now = new Date();
+  return {
+    name: '',
+    gender: Gender.MALE,
+    calendarType: CalendarType.SOLAR,
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    day: now.getDate(),
+    hour: now.getHours(),
+    minute: now.getMinutes(),
+    isLeapMonth: false,
+    selectedCityKey: '不参考出生地 (北京时间)',
+    autoSave: true,
+    group: '',
+    processEarlyLateRat: true, // Default to true (Distinguish Early/Late Rat)
+    manualYear: '甲子',
+    manualMonth: '丙寅',
+    manualDay: '戊辰',
+    manualHour: '壬子'
+  };
 };
 
 interface PillarSelection {
@@ -50,7 +52,7 @@ const initialPillars: PillarSelection = {
 function App() {
   const [view, setView] = useState<'form' | 'chart'>('form');
   const [inputMode, setInputMode] = useState<'date' | 'manual'>('date');
-  const [input, setInput] = useState<UserInput>(initialInput);
+  const [input, setInput] = useState<UserInput>(getInitialInput); // Lazy initialization
   
   const [pillars, setPillars] = useState<PillarSelection>(initialPillars);
   const [foundDates, setFoundDates] = useState<MatchingDate[]>([]);
@@ -95,9 +97,33 @@ function App() {
   // Generate Wheel Options
   const yearOptions = years.map(y => ({ label: `${y}`, value: y }));
   
-  const monthOptions = input.calendarType === CalendarType.LUNAR 
-      ? LUNAR_MONTHS.map((m, i) => ({ label: m, value: i + 1 }))
-      : Array.from({length: 12}, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
+  // Dynamic Month Options (Handle Lunar Leap Months)
+  const leapMonth = useMemo(() => {
+      if (input.calendarType === CalendarType.LUNAR) {
+          try {
+              return LunarYear.fromYear(input.year).getLeapMonth();
+          } catch (e) {
+              console.error("Error getting leap month:", e);
+              return 0;
+          }
+      }
+      return 0;
+  }, [input.year, input.calendarType]);
+
+  const monthOptions = useMemo(() => {
+      if (input.calendarType === CalendarType.LUNAR) {
+          const opts = [];
+          for (let i = 1; i <= 12; i++) {
+              opts.push({ label: LUNAR_MONTHS[i-1], value: i });
+              if (i === leapMonth) {
+                   opts.push({ label: `闰${LUNAR_MONTHS[i-1]}`, value: -i });
+              }
+          }
+          return opts;
+      } else {
+          return Array.from({length: 12}, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
+      }
+  }, [input.calendarType, leapMonth]);
 
   const dayOptions = input.calendarType === CalendarType.LUNAR
       ? LUNAR_DAYS.map((d, i) => ({ label: d, value: i + 1 }))
@@ -132,6 +158,20 @@ function App() {
           setIsPickerExpanded(false);
       }
   }, [view]);
+
+  // Validate Leap Month when Year Changes
+  useEffect(() => {
+      if (input.calendarType === CalendarType.LUNAR && input.isLeapMonth) {
+           try {
+               const currentLeap = LunarYear.fromYear(input.year).getLeapMonth();
+               if (currentLeap !== input.month) {
+                   setInput(prev => ({ ...prev, isLeapMonth: false }));
+               }
+           } catch (e) {
+               console.error("Error validating leap month:", e);
+           }
+      }
+  }, [input.year, input.calendarType]);
 
   // Auto-resize textarea when noteDraft changes
   useEffect(() => {
@@ -180,7 +220,7 @@ function App() {
   };
 
   const handleReset = () => {
-      setInput(initialInput);
+      setInput(getInitialInput());
       setPillars(initialPillars);
       setEditingId(null);
       setNoteDraft('');
@@ -714,8 +754,15 @@ function App() {
                          />
                          <WheelPicker 
                              options={monthOptions} 
-                             value={input.month} 
-                             onChange={(v) => setInput({ ...input, month: Number(v) })} 
+                             value={input.calendarType === CalendarType.LUNAR && input.isLeapMonth ? -input.month : input.month} 
+                             onChange={(v) => {
+                                 const val = Number(v);
+                                 setInput({ 
+                                     ...input, 
+                                     month: Math.abs(val),
+                                     isLeapMonth: val < 0
+                                 });
+                             }} 
                              label={input.calendarType === CalendarType.SOLAR ? "月" : ""}
                              className="flex-1"
                              expanded={isPickerExpanded}
